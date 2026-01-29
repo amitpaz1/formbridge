@@ -31,3 +31,5 @@ export { ResumeFormPage } from './components/ResumeFormPage';
 export type { ResumeFormPageProps } from './components/ResumeFormPage';
 export { FieldWrapper } from './components/FieldWrapper';
 export type { FieldWrapperProps } from './components/FieldWrapper';
+export { ActorBadge } from './components/ActorBadge';
+export type { ActorBadgeProps } from './components/ActorBadge';
