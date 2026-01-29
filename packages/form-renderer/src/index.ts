@@ -45,6 +45,7 @@ export { BooleanField } from './components/fields/BooleanField';
 export { EnumField } from './components/fields/EnumField';
 export { ObjectField } from './components/fields/ObjectField';
 export { ArrayField } from './components/fields/ArrayField';
+export { FileField } from './components/fields/FileField';
 
 // Helper components (for advanced customization)
 export { FieldWrapper } from './components/FieldWrapper';
@@ -118,6 +119,7 @@ export type {
   EnumFieldProps,
   ObjectFieldProps,
   ArrayFieldProps,
+  FileFieldProps,
 
   // Actor and submission types
   Actor,
