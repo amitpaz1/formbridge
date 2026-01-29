@@ -301,7 +301,7 @@ export class SubmissionManager {
     }
 
     // Generate the resume URL with the token
-    const resumeUrl = `${this.baseUrl}/resume?token=${submission.resumeToken}`;
+    const resumeUrl = `${this.baseUrl}/resume?token=${encodeURIComponent(submission.resumeToken)}`;
 
     const now = new Date().toISOString();
 
@@ -324,5 +324,46 @@ export class SubmissionManager {
     await this.store.save(submission);
 
     return resumeUrl;
+  }
+
+  /**
+   * Emit HANDOFF_RESUMED event when human opens the resume form
+   * This notifies the agent that the human has started working on the form
+   */
+  async emitHandoffResumed(
+    resumeToken: string,
+    actor: Actor
+  ): Promise<string> {
+    const submission = await this.store.getByResumeToken(resumeToken);
+
+    if (!submission) {
+      throw new Error(`Submission not found for resume token: ${resumeToken}`);
+    }
+
+    // Check if submission is expired
+    if (submission.expiresAt && new Date(submission.expiresAt) < new Date()) {
+      throw new Error("This resume link has expired");
+    }
+
+    const now = new Date().toISOString();
+
+    // Create handoff.resumed event
+    const event: IntakeEvent = {
+      eventId: `evt_${randomUUID()}`,
+      type: "handoff.resumed",
+      submissionId: submission.id,
+      ts: now,
+      actor,
+      state: submission.state,
+      payload: {
+        resumeToken: submission.resumeToken,
+      },
+    };
+
+    submission.events.push(event);
+    await this.eventEmitter.emit(event);
+    await this.store.save(submission);
+
+    return event.eventId;
   }
 }

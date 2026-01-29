@@ -77,6 +77,101 @@ export function createSubmissionRoutes(manager: SubmissionManager) {
         next(error);
       }
     },
+
+    /**
+     * GET /submissions/resume/:resumeToken
+     * Fetch submission data by resume token for agent-to-human handoff
+     *
+     * Used by frontend ResumeFormPage to load pre-filled form data
+     */
+    async getByResumeToken(req: Request, res: Response, next: NextFunction) {
+      try {
+        const { resumeToken } = req.params;
+
+        if (!resumeToken) {
+          res.status(400).json({
+            error: "Missing resume token",
+          });
+          return;
+        }
+
+        // Fetch submission by resume token (method already exists)
+        const submission = await manager.getSubmissionByResumeToken(resumeToken);
+
+        if (!submission) {
+          res.status(404).json({
+            error: "Submission not found. The resume link may be invalid or expired.",
+          });
+          return;
+        }
+
+        // Check if submission is expired
+        if (submission.expiresAt && new Date(submission.expiresAt) < new Date()) {
+          res.status(403).json({
+            error: "This resume link has expired.",
+          });
+          return;
+        }
+
+        // Return submission with fields and field attribution
+        res.status(200).json(submission);
+      } catch (error) {
+        next(error);
+      }
+    },
+
+    /**
+     * POST /submissions/resume/:resumeToken/resumed
+     * Emit HANDOFF_RESUMED event when human opens the resume form
+     *
+     * Allows agent to be notified when human starts completing the form
+     */
+    async emitResumed(req: Request, res: Response, next: NextFunction) {
+      try {
+        const { resumeToken } = req.params;
+
+        if (!resumeToken) {
+          res.status(400).json({
+            error: "Missing resume token",
+          });
+          return;
+        }
+
+        // Extract actor from request body or use default human actor
+        const actor: Actor = req.body?.actor || {
+          kind: "human",
+          id: "human-unknown",
+          name: "Human User",
+        };
+
+        // Emit handoff.resumed event via manager
+        const eventId = await manager.emitHandoffResumed(resumeToken, actor);
+
+        res.status(200).json({
+          ok: true,
+          eventId,
+        });
+      } catch (error) {
+        // Handle submission not found or expired errors
+        if (error instanceof Error) {
+          if (error.message.includes("not found")) {
+            res.status(404).json({
+              error: error.message,
+            });
+            return;
+          }
+          if (error.message.includes("expired")) {
+            res.status(403).json({
+              error: error.message,
+            });
+            return;
+          }
+        }
+
+        // Pass other errors to error handler
+        next(error);
+      }
+    },
   };
 }
 

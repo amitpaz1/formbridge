@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { createApiClient } from '../api/client';
 
 /**
  * Submission data structure
@@ -158,6 +159,20 @@ export function useResumeSubmission(
 
         setSubmission(data);
         setLoading(false);
+
+        // Emit HANDOFF_RESUMED event to notify agent
+        try {
+          const client = createApiClient({ baseUrl: endpoint });
+          await client.emitHandoffResumed(resumeToken, {
+            kind: 'human',
+            id: 'human-web',
+            name: 'Human User',
+          });
+        } catch (eventError) {
+          // Don't fail the whole load if event emission fails
+          console.warn('Failed to emit HANDOFF_RESUMED event:', eventError);
+        }
+
         onLoad?.(data);
       } catch (err) {
         // Ignore abort errors
