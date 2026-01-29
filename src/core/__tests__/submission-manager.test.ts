@@ -347,6 +347,110 @@ describe("SubmissionManager", () => {
     });
   });
 
+  describe("emitHandoffResumed", () => {
+    it("should emit handoff.resumed event for valid resume token", async () => {
+      // Create a submission
+      const createRequest: CreateSubmissionRequest = {
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        initialFields: {
+          companyName: "Acme Corp",
+        },
+      };
+
+      const createResponse = await manager.createSubmission(createRequest);
+      eventEmitter.clear();
+
+      // Emit handoff resumed event
+      const eventId = await manager.emitHandoffResumed(
+        createResponse.resumeToken,
+        humanActor
+      );
+
+      // Verify event was emitted
+      expect(eventEmitter.events).toHaveLength(1);
+      expect(eventEmitter.events[0].type).toBe("handoff.resumed");
+      expect(eventEmitter.events[0].actor).toEqual(humanActor);
+      expect(eventEmitter.events[0].payload?.resumeToken).toBe(
+        createResponse.resumeToken
+      );
+      expect(eventId).toMatch(/^evt_/);
+    });
+
+    it("should throw error for invalid resume token", async () => {
+      await expect(
+        manager.emitHandoffResumed("rtok_invalid", humanActor)
+      ).rejects.toThrow("Submission not found for resume token");
+    });
+
+    it("should throw error for expired submission", async () => {
+      // Create an expired submission
+      const createRequest: CreateSubmissionRequest = {
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        ttlMs: -1000, // Already expired
+      };
+
+      const createResponse = await manager.createSubmission(createRequest);
+
+      await expect(
+        manager.emitHandoffResumed(createResponse.resumeToken, humanActor)
+      ).rejects.toThrow("This resume link has expired");
+    });
+
+    it("should record event in submission.events array", async () => {
+      // Create a submission
+      const createRequest: CreateSubmissionRequest = {
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+      };
+
+      const createResponse = await manager.createSubmission(createRequest);
+      const initialEventCount = (await store.get(createResponse.submissionId))!
+        .events.length;
+
+      // Emit handoff resumed event
+      await manager.emitHandoffResumed(
+        createResponse.resumeToken,
+        humanActor
+      );
+
+      // Verify event was recorded in submission
+      const submission = await store.get(createResponse.submissionId);
+      expect(submission!.events).toHaveLength(initialEventCount + 1);
+
+      const resumedEvent = submission!.events[submission!.events.length - 1];
+      expect(resumedEvent.type).toBe("handoff.resumed");
+      expect(resumedEvent.actor).toEqual(humanActor);
+      expect(resumedEvent.submissionId).toBe(createResponse.submissionId);
+    });
+
+    it("should return eventId", async () => {
+      // Create a submission
+      const createRequest: CreateSubmissionRequest = {
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+      };
+
+      const createResponse = await manager.createSubmission(createRequest);
+
+      // Emit handoff resumed event
+      const eventId = await manager.emitHandoffResumed(
+        createResponse.resumeToken,
+        humanActor
+      );
+
+      // Verify eventId format
+      expect(eventId).toMatch(/^evt_/);
+      expect(typeof eventId).toBe("string");
+
+      // Verify eventId matches the event in submission
+      const submission = await store.get(createResponse.submissionId);
+      const resumedEvent = submission!.events[submission!.events.length - 1];
+      expect(resumedEvent.eventId).toBe(eventId);
+    });
+  });
+
   describe("mixed-mode agent-human collaboration", () => {
     it("should track field attribution in a typical handoff workflow", async () => {
       // Step 1: Agent creates submission and fills known fields
