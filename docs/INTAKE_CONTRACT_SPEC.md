@@ -25,6 +25,10 @@ Any system that implements this contract can reliably collect structured data fr
   - [2.4 Submission Record Schema](#24-submission-record-schema)
 - [3. Error Schema](#3-error-schema)
   - [3.1 Error Types](#31-error-types)
+  - [3.2 Token Error Examples](#32-token-error-examples)
+    - [3.2.1 Token Expired (410 Gone)](#321-token-expired-410-gone)
+    - [3.2.2 Token Conflict (409 Conflict)](#322-token-conflict-409-conflict)
+    - [3.2.3 Token Invalid (400 Bad Request)](#323-token-invalid-400-bad-request)
 - [4. Operations](#4-operations)
   - [4.1 `createSubmission`](#41-createsubmission)
   - [4.2 `setFields`](#42-setfields)
@@ -43,14 +47,22 @@ Any system that implements this contract can reliably collect structured data fr
   - [6.3 Event Serialization](#63-event-serialization)
 - [7. Resume Protocol](#7-resume-protocol)
   - [7.1 Resume Tokens](#71-resume-tokens)
+    - [7.1.1 Token Format and Properties](#711-token-format-and-properties)
+    - [7.1.2 Token Lifecycle](#712-token-lifecycle)
+    - [7.1.3 Version and Concurrency Control (ETag Mechanism)](#713-version-and-concurrency-control-etag-mechanism)
+    - [7.1.4 Token Expiration Behavior](#714-token-expiration-behavior)
+    - [7.1.5 Multi-Actor Handoff](#715-multi-actor-handoff)
+    - [7.1.6 Implementation Notes](#716-implementation-notes)
   - [7.2 Handoff Flow](#72-handoff-flow)
+    - [7.2.1 Basic Handoff Sequence](#721-basic-handoff-sequence)
+    - [7.2.2 Step-by-Step Example with Token Passing](#722-step-by-step-example-with-token-passing)
+    - [7.2.3 Version Rotation on Each Operation](#723-version-rotation-on-each-operation)
+    - [7.2.4 Conflict Detection Example](#724-conflict-detection-example)
+    - [7.2.5 Resume URL Generation Patterns](#725-resume-url-generation-patterns)
 - [8. Idempotency](#8-idempotency)
   - [8.1 Creation Idempotency](#81-creation-idempotency)
   - [8.2 Submission Idempotency](#82-submission-idempotency)
-  - [8.3 Storage Backend Configuration](#83-storage-backend-configuration)
-  - [8.4 TTL and Expiration](#84-ttl-and-expiration)
-  - [8.5 Concurrent Request Handling](#85-concurrent-request-handling)
-  - [8.6 HTTP Header Examples](#86-http-header-examples)
+  - [8.3 Key Format](#83-key-format)
 - [9. Upload Negotiation](#9-upload-negotiation)
 - [10. Approval Gates](#10-approval-gates)
   - [10.1 Gate Definition](#101-gate-definition)
@@ -58,7 +70,14 @@ Any system that implements this contract can reliably collect structured data fr
 - [11. Intake Definition](#11-intake-definition)
 - [12. Transport Bindings](#12-transport-bindings)
   - [12.1 HTTP/JSON Binding](#121-httpjson-binding)
+    - [12.1.1 Submission ID-Based Endpoints](#1211-submission-id-based-endpoints)
+    - [12.1.2 Resume Token-Based Endpoints](#1212-resume-token-based-endpoints)
+    - [12.1.3 Concurrency Control Headers](#1213-concurrency-control-headers)
+    - [12.1.4 Status Codes](#1214-status-codes)
   - [12.2 MCP Tool Binding](#122-mcp-tool-binding)
+    - [12.2.1 Tool Definitions](#1221-tool-definitions)
+    - [12.2.2 Resume Token Parameters](#1222-resume-token-parameters)
+    - [12.2.3 Example MCP Tool Calls](#1223-example-mcp-tool-calls)
 - [Appendix A: Glossary](#appendix-a-glossary)
 - [Appendix B: Comparison with MCP Elicitation](#appendix-b-comparison-with-mcp-elicitation)
 
@@ -146,118 +165,50 @@ Any system that implements this contract can reliably collect structured data fr
 
 ### 2.4 Submission Record Schema
 
-Every submission is represented by a record with the following structure:
+A submission record captures the complete state of an in-flight or completed submission.
 
 ```typescript
 interface SubmissionRecord {
-  // Identity
-  submissionId: string;                // Unique identifier for this submission
-  intakeId: string;                    // Which intake definition this uses
+  submissionId: string;
+  intakeId: string;
+  state: SubmissionState;
 
-  // State
-  state: SubmissionState;              // Current lifecycle state
-  resumeToken: string;                 // Optimistic concurrency token
+  // Resume and concurrency control
+  resumeToken: string;              // Opaque token for resuming and optimistic concurrency
+  version: number;                  // Monotonic version number; increments on every state change
+  tokenExpiresAt: string;           // ISO 8601 timestamp; when the current resumeToken expires
 
-  // Data
-  fields: Record<string, unknown>;     // Collected field values
-  schema: JSONSchema;                  // The intake schema
+  // Submission data
+  fields: Record<string, unknown>;  // Current field values
+  schema: JSONSchema;               // The intake schema (for validation)
 
-  // Idempotency Metadata
-  idempotencyKey?: string;             // Deduplication key (if provided at creation)
-  originalTimestamp: string;           // ISO 8601 timestamp of first creation
-  replayCount: number;                 // Number of times this submission was returned via idempotent replay (0 = original)
+  // Metadata
+  createdAt: string;                // ISO 8601 timestamp
+  updatedAt: string;                // ISO 8601 timestamp
+  createdBy: Actor;
+  lastUpdatedBy: Actor;
 
-  // Lifecycle Metadata
-  createdAt: string;                   // ISO 8601 timestamp
-  updatedAt: string;                   // ISO 8601 timestamp of last state change
-  expiresAt: string;                   // ISO 8601 timestamp when TTL expires
-  actor: Actor;                        // Most recent actor
+  // Lifecycle
+  submittedAt?: string;             // ISO 8601 timestamp; when submit() was called
+  finalizedAt?: string;             // ISO 8601 timestamp; when delivery completed
+  expiresAt?: string;               // ISO 8601 timestamp; TTL deadline
 
-  // Validation State
-  missingFields?: string[];            // Fields still needed for completion
-  validationErrors?: FieldError[];     // Current validation issues
-
-  // Upload State
-  pendingUploads?: PendingUpload[];    // Files awaiting upload completion
-
-  // Review State (if applicable)
-  reviewState?: {
-    gate: string;                      // Which approval gate
-    requestedAt: string;               // When review was requested
-    reviewers: string[];               // Authorized reviewer IDs
-    decision?: "approved" | "rejected";
-    decidedBy?: Actor;
-    decidedAt?: string;
-    reasons?: string[];                // If rejected
-  };
-
-  // Delivery State (if finalized)
-  deliveryState?: {
-    attemptCount: number;
-    lastAttemptAt?: string;
-    lastError?: string;
-    deliveredAt?: string;
-  };
-}
-
-interface PendingUpload {
-  field: string;                       // Field path
-  uploadId: string;                    // Upload session ID
-  filename: string;
-  sizeBytes: number;
-  mimeType: string;
-  requestedAt: string;
+  // Idempotency
+  idempotencyKey?: string;          // Creation or submission idempotency key
 }
 ```
 
-#### Idempotency Metadata Fields
+**Field Descriptions:**
 
-**`idempotencyKey`** (optional)
-- Present only if the submission was created with an idempotency key (§8.1)
-- Used to detect duplicate creation requests
-- Retained until submission reaches terminal state + grace period
+- **`resumeToken`**: An opaque string representing the current checkpoint. MUST be passed on all mutating operations. Rotates on every state change. See §7.1 for full semantics.
 
-**`originalTimestamp`** (required)
-- ISO 8601 timestamp of the first creation of this submission
-- Never changes, even if the submission is accessed via idempotent replay
-- Used for audit trails and TTL calculations
+- **`version`**: A monotonic integer that increments with each state mutation. Used for optimistic concurrency control and audit ordering. Starts at 1 on creation. Implementations MAY use UUIDs instead of integers if total ordering is not required.
 
-**`replayCount`** (required, default: 0)
-- Number of times this submission has been returned via idempotent cache replay
-- `0` = Original creation response
-- `1+` = Returned from cache due to duplicate idempotency key
-- Incremented each time a cached creation response is replayed
-- Helps distinguish new operations from retries in observability and debugging
+- **`tokenExpiresAt`**: ISO 8601 timestamp indicating when the current `resumeToken` becomes invalid. Typically tied to session TTL or submission expiration. After this time, operations using this token will fail with `error.type = "expired"`.
 
-**Example: Original Creation**
-```json
-{
-  "submissionId": "sub_abc123",
-  "intakeId": "vendor_onboarding",
-  "state": "in_progress",
-  "idempotencyKey": "idem_xyz789",
-  "originalTimestamp": "2026-01-29T10:00:00Z",
-  "replayCount": 0,
-  "createdAt": "2026-01-29T10:00:00Z",
-  "updatedAt": "2026-01-29T10:00:00Z"
-}
-```
+- **`fields`**: The current values of all fields set via `setFields`. Keys match the JSON Schema property names (including nested dot-paths for nested objects).
 
-**Example: Replayed Response**
-```json
-{
-  "submissionId": "sub_abc123",
-  "intakeId": "vendor_onboarding",
-  "state": "in_progress",
-  "idempotencyKey": "idem_xyz789",
-  "originalTimestamp": "2026-01-29T10:00:00Z",
-  "replayCount": 2,
-  "createdAt": "2026-01-29T10:00:00Z",
-  "updatedAt": "2026-01-29T10:00:00Z"
-}
-```
-
-Note: `replayCount` increments with each cache hit, while `originalTimestamp` remains constant.
+- **`state`**: Current lifecycle state (see §2.1).
 
 ---
 
@@ -271,8 +222,9 @@ interface IntakeError {
   submissionId: string;
   state: SubmissionState;
   resumeToken: string;
+  version?: number;               // Current version (included in token_conflict responses)
   error: {
-    type: "missing" | "invalid" | "conflict" | "needs_approval" | "upload_pending" | "delivery_failed" | "expired" | "cancelled";
+    type: "missing" | "invalid" | "conflict" | "needs_approval" | "upload_pending" | "delivery_failed" | "expired" | "cancelled" | "token_expired" | "token_conflict" | "token_invalid";
     message?: string;             // Human-readable summary
     fields?: FieldError[];        // Per-field details
     nextActions?: NextAction[];   // What the caller should do next
@@ -305,12 +257,152 @@ interface NextAction {
 |---|---|---|---|
 | `missing` | Required fields not provided | Yes | `collect_field` |
 | `invalid` | Fields provided but fail validation | Yes | `collect_field` (with corrected value) |
-| `conflict` | Idempotency key reused with different payload; same key with identical payload returns cached result | No | Use new idempotency key or fetch existing |
+| `conflict` | Idempotency key reused with different payload | No | Use new idempotency key or fetch existing |
 | `needs_approval` | Submission requires human review | No (wait) | `wait_for_review` |
 | `upload_pending` | Files declared but not yet uploaded | Yes | `request_upload` |
 | `delivery_failed` | Finalization webhook/API call failed | Yes | `retry_delivery` |
 | `expired` | Submission TTL elapsed | No | Create new submission |
 | `cancelled` | Submission was explicitly cancelled | No | Create new submission |
+| `token_expired` | Resume token has expired (past `tokenExpiresAt`) | No | Fetch fresh submission state and use new token |
+| `token_conflict` | Resume token is stale (another operation updated state) | Yes | Fetch latest state and retry with current token |
+| `token_invalid` | Resume token is malformed or not recognized | No | Fetch fresh submission state |
+
+### 3.2 Token Error Examples
+
+#### 3.2.1 Token Expired (410 Gone)
+
+When a resume token is used after its `tokenExpiresAt` timestamp:
+
+```typescript
+// Request
+setFields({
+  submissionId: "sub_123",
+  resumeToken: "rtok_v2_expired",
+  fields: { legal_name: "Acme Corp" }
+})
+
+// Response (HTTP 410 Gone)
+{
+  ok: false,
+  submissionId: "sub_123",
+  state: "in_progress",
+  resumeToken: "rtok_v5_current",  // Current valid token
+  version: 5,
+  error: {
+    type: "token_expired",
+    message: "Resume token has expired. Fetch the latest submission state to continue.",
+    retryable: false,
+    nextActions: [
+      {
+        action: "fetch_current_state",
+        hint: "Call getSubmission() to retrieve the current resumeToken and retry."
+      }
+    ]
+  }
+}
+```
+
+#### 3.2.2 Token Conflict (409 Conflict)
+
+When a resume token is stale because another operation has modified the submission:
+
+```typescript
+// Initial state: submission is at version 3 with rtok_v3
+// Actor A successfully updates → version 4, rtok_v4
+// Actor B tries to update with stale rtok_v3
+
+// Request (Actor B with stale token)
+setFields({
+  submissionId: "sub_123",
+  resumeToken: "rtok_v3",  // Stale
+  fields: { country: "CA" }
+})
+
+// Response (HTTP 409 Conflict)
+{
+  ok: false,
+  submissionId: "sub_123",
+  state: "in_progress",
+  resumeToken: "rtok_v4",  // Current valid token
+  version: 4,              // Current version
+  error: {
+    type: "token_conflict",
+    message: "Resume token is stale. The submission was modified by another actor.",
+    retryable: true,
+    nextActions: [
+      {
+        action: "fetch_current_state",
+        hint: "Call getSubmission() to retrieve version 4, merge your changes, and retry with rtok_v4."
+      }
+    ]
+  }
+}
+```
+
+**Optimistic Concurrency Pattern:**
+
+```typescript
+async function setFieldsWithRetry(submissionId, resumeToken, fields, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const result = await setFields({ submissionId, resumeToken, fields });
+
+    if (result.ok) {
+      return result;
+    }
+
+    if (result.error.type === "token_conflict") {
+      // Fetch latest state
+      const latest = await getSubmission({ submissionId });
+
+      // Merge changes (application-specific logic)
+      const merged = { ...latest.fields, ...fields };
+
+      // Retry with current token
+      resumeToken = latest.resumeToken;
+      fields = merged;
+      continue;
+    }
+
+    // Non-retryable error
+    throw new Error(result.error.message);
+  }
+
+  throw new Error("Max retries exceeded for token conflict");
+}
+```
+
+#### 3.2.3 Token Invalid (400 Bad Request)
+
+When a resume token is malformed, corrupted, or doesn't exist:
+
+```typescript
+// Request
+setFields({
+  submissionId: "sub_123",
+  resumeToken: "invalid_token_format",
+  fields: { legal_name: "Acme Corp" }
+})
+
+// Response (HTTP 400 Bad Request)
+{
+  ok: false,
+  submissionId: "sub_123",
+  state: "in_progress",
+  resumeToken: "rtok_v5_current",  // Current valid token (if submission exists)
+  version: 5,
+  error: {
+    type: "token_invalid",
+    message: "Resume token is invalid or malformed.",
+    retryable: false,
+    nextActions: [
+      {
+        action: "fetch_current_state",
+        hint: "Call getSubmission() to retrieve a valid resumeToken."
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -337,52 +429,173 @@ Creates a new submission for a given intake definition.
   ok: true;
   submissionId: string;
   state: "draft" | "in_progress";  // "in_progress" if initialFields provided
-  resumeToken: string;
+  resumeToken: string;             // Token for subsequent operations
+  version: number;                 // Initial version (always 1)
+  tokenExpiresAt: string;          // ISO 8601 timestamp
   schema: JSONSchema;              // The full intake schema
+  fields: Record<string, unknown>; // Current field values
   missingFields?: string[];        // Fields still needed (if initialFields partial)
+}
+```
+
+**Example:**
+```typescript
+// Create submission with initial fields
+const result = await createSubmission({
+  intakeId: "intake_vendor_onboarding",
+  actor: { kind: "agent", id: "onboarding_bot" },
+  initialFields: { legal_name: "Acme Corp", country: "US" },
+  idempotencyKey: "create_acme_20260129"
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "in_progress",
+  resumeToken: "rtok_v1_a1b2c3d4",
+  version: 1,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  schema: { /* full JSON Schema */ },
+  fields: { legal_name: "Acme Corp", country: "US" },
+  missingFields: ["tax_id", "address", "w9_document"]
 }
 ```
 
 ### 4.2 `setFields`
 
-Sets or updates fields on an existing submission.
+Sets or updates fields on an existing submission. Requires a valid `resumeToken` for optimistic concurrency control.
 
 **Input:**
 ```typescript
 {
   submissionId: string;
-  resumeToken: string;
+  resumeToken: string;             // Current resume token (from previous operation)
   actor: Actor;
-  fields: Record<string, unknown>;
+  fields: Record<string, unknown>; // Fields to set or update
 }
 ```
 
-**Output:** Success with updated state + any remaining validation issues, or `IntakeError`.
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: SubmissionState;          // Updated state
+  resumeToken: string;             // New resume token (rotated)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;          // ISO 8601 timestamp
+  fields: Record<string, unknown>; // All current field values
+  missingFields?: string[];        // Fields still needed for submission
+  validationErrors?: FieldError[]; // Any validation issues
+}
+```
+
+**Output (Error):** `IntakeError` (see §3)
+
+**Example:**
+```typescript
+// Update fields with resume token
+const result = await setFields({
+  submissionId: "sub_abc123",
+  resumeToken: "rtok_v1_a1b2c3d4",  // Token from createSubmission
+  actor: { kind: "agent", id: "onboarding_bot" },
+  fields: {
+    tax_id: "12-3456789",
+    address: {
+      street: "123 Main St",
+      city: "San Francisco",
+      state: "CA",
+      zip: "94105"
+    }
+  }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "in_progress",
+  resumeToken: "rtok_v2_b2c3d4e5",  // Token rotated
+  version: 2,                        // Version incremented
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: {
+    legal_name: "Acme Corp",
+    country: "US",
+    tax_id: "12-3456789",
+    address: { street: "123 Main St", city: "San Francisco", state: "CA", zip: "94105" }
+  },
+  missingFields: ["w9_document"]
+}
+```
 
 ### 4.3 `validate`
 
-Validates current submission state without submitting.
+Validates current submission state without submitting. Does not mutate state, so the `resumeToken` is not rotated.
 
 **Input:**
 ```typescript
 {
   submissionId: string;
-  resumeToken: string;
+  resumeToken: string;  // Current resume token (not rotated on validate)
 }
 ```
 
-**Output:** `{ ok: true, state, ready: boolean }` or `IntakeError` with field-level details.
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: SubmissionState;
+  resumeToken: string;             // Same token (not rotated for read-only ops)
+  version: number;                 // Current version (unchanged)
+  tokenExpiresAt: string;
+  ready: boolean;                  // True if all fields valid for submission
+  missingFields?: string[];
+  validationErrors?: FieldError[];
+}
+```
+
+**Output (Error):** `IntakeError` with field-level details (see §3)
+
+**Example:**
+```typescript
+// Validate before submitting
+const result = await validate({
+  submissionId: "sub_abc123",
+  resumeToken: "rtok_v2_b2c3d4e5"
+});
+
+// Response (not ready)
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "awaiting_input",
+  resumeToken: "rtok_v2_b2c3d4e5",  // Same token (unchanged)
+  version: 2,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  ready: false,
+  missingFields: ["w9_document"],
+  validationErrors: [
+    {
+      path: "w9_document",
+      code: "file_required",
+      message: "W-9 form is required"
+    }
+  ]
+}
+```
 
 ### 4.4 `requestUpload`
 
-Negotiates a file upload for a given field.
+Negotiates a file upload for a given field. Transitions submission to `awaiting_upload` state and rotates the resume token.
 
 **Input:**
 ```typescript
 {
   submissionId: string;
-  resumeToken: string;
-  field: string;                   // Dot-path to the file field
+  resumeToken: string;             // Current resume token
+  field: string;                   // Dot-path to the file field (e.g., "w9_document")
   filename: string;
   mimeType: string;
   sizeBytes: number;
@@ -394,7 +607,12 @@ Negotiates a file upload for a given field.
 ```typescript
 {
   ok: true;
-  uploadId: string;
+  submissionId: string;
+  state: "awaiting_upload";
+  resumeToken: string;             // New resume token (rotated)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;
+  uploadId: string;                // Use this to confirm upload later
   method: "PUT" | "POST";
   url: string;                     // Signed upload URL
   headers?: Record<string, string>;
@@ -406,41 +624,184 @@ Negotiates a file upload for a given field.
 }
 ```
 
+**Example:**
+```typescript
+// Request upload for W-9 document
+const result = await requestUpload({
+  submissionId: "sub_abc123",
+  resumeToken: "rtok_v2_b2c3d4e5",
+  field: "w9_document",
+  filename: "acme-w9.pdf",
+  mimeType: "application/pdf",
+  sizeBytes: 524288,
+  actor: { kind: "agent", id: "onboarding_bot" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "awaiting_upload",
+  resumeToken: "rtok_v3_c3d4e5f6",  // Token rotated
+  version: 3,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  uploadId: "upload_xyz789",
+  method: "PUT",
+  url: "https://storage.example.com/uploads/xyz789?signed=...",
+  headers: { "Content-Type": "application/pdf" },
+  expiresInMs: 3600000,
+  constraints: {
+    accept: ["application/pdf", "image/png", "image/jpeg"],
+    maxBytes: 10485760
+  }
+}
+```
+
 ### 4.5 `confirmUpload`
 
-Confirms a completed upload (called after the client uploads to the signed URL).
+Confirms a completed upload (called after the client uploads to the signed URL). Verifies the upload and transitions back to `in_progress` state.
 
 **Input:**
 ```typescript
 {
   submissionId: string;
-  resumeToken: string;
-  uploadId: string;
+  resumeToken: string;  // Token from requestUpload response
+  uploadId: string;     // uploadId from requestUpload response
   actor: Actor;
 }
 ```
 
-**Output:** Success with updated state, or error if upload verification fails.
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: "in_progress";            // Back to in_progress after successful upload
+  resumeToken: string;             // New resume token (rotated)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;
+  fields: Record<string, unknown>; // Updated with file metadata
+  missingFields?: string[];
+}
+```
+
+**Output (Error):** `IntakeError` if upload verification fails
+
+**Example:**
+```typescript
+// After uploading file to signed URL, confirm the upload
+const result = await confirmUpload({
+  submissionId: "sub_abc123",
+  resumeToken: "rtok_v3_c3d4e5f6",
+  uploadId: "upload_xyz789",
+  actor: { kind: "agent", id: "onboarding_bot" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "in_progress",
+  resumeToken: "rtok_v4_d4e5f6g7",  // Token rotated
+  version: 4,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: {
+    legal_name: "Acme Corp",
+    country: "US",
+    tax_id: "12-3456789",
+    address: { /* ... */ },
+    w9_document: {
+      filename: "acme-w9.pdf",
+      mimeType: "application/pdf",
+      sizeBytes: 524288,
+      url: "https://storage.example.com/files/abc123/w9.pdf"
+    }
+  },
+  missingFields: []  // All required fields now provided
+}
+```
 
 ### 4.6 `submit`
 
-Locks the submission and requests finalization (or routes to review).
+Locks the submission and requests finalization (or routes to review). This is the final mutating operation in the normal flow.
 
 **Input:**
 ```typescript
 {
   submissionId: string;
-  resumeToken: string;
+  resumeToken: string;             // Current resume token
   idempotencyKey: string;          // Required — prevents duplicate submissions
   actor: Actor;
 }
 ```
 
-**Output:** Success with new state (`submitted`, `needs_review`, or `finalized`), or `IntakeError`.
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: "submitted" | "needs_review" | "finalized";  // Depends on approval gate policy
+  resumeToken: string;             // New resume token (rotated)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;
+  fields: Record<string, unknown>; // Final field values (locked)
+  submittedAt: string;             // ISO 8601 timestamp
+  finalizedAt?: string;            // Present if state is "finalized"
+}
+```
+
+**Output (Error):** `IntakeError` (e.g., validation failed, missing fields)
+
+**Example (No Approval Gate):**
+```typescript
+// Submit for immediate finalization
+const result = await submit({
+  submissionId: "sub_abc123",
+  resumeToken: "rtok_v4_d4e5f6g7",
+  idempotencyKey: "submit_acme_20260129",
+  actor: { kind: "agent", id: "onboarding_bot" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  state: "finalized",
+  resumeToken: "rtok_v5_e5f6g7h8",  // Token rotated (though submission is now locked)
+  version: 5,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: { /* all submitted fields */ },
+  submittedAt: "2026-01-29T10:05:00Z",
+  finalizedAt: "2026-01-29T10:05:01Z"
+}
+```
+
+**Example (With Approval Gate):**
+```typescript
+// Submit to approval gate
+const result = await submit({
+  submissionId: "sub_def456",
+  resumeToken: "rtok_v3_x1y2z3a4",
+  idempotencyKey: "submit_acme2_20260129",
+  actor: { kind: "agent", id: "onboarding_bot" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_def456",
+  state: "needs_review",
+  resumeToken: "rtok_v4_y2z3a4b5",
+  version: 4,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: { /* all submitted fields */ },
+  submittedAt: "2026-01-29T10:05:00Z"
+}
+```
 
 ### 4.7 `review`
 
-Approves or rejects a submission in `needs_review` state.
+Approves or rejects a submission in `needs_review` state. This operation is typically performed by a human reviewer and does not require a resume token (uses submissionId-based access).
 
 **Input:**
 ```typescript
@@ -452,11 +813,77 @@ Approves or rejects a submission in `needs_review` state.
 }
 ```
 
-**Output:** Success with new state, or error.
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: "approved" | "rejected" | "finalized";  // "finalized" if auto-delivered after approval
+  resumeToken: string;             // New resume token (rotated)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;
+  decision: "approved" | "rejected";
+  reviewedAt: string;              // ISO 8601 timestamp
+  reviewedBy: Actor;
+  reasons?: string[];              // Present if rejected
+  finalizedAt?: string;            // Present if auto-finalized after approval
+}
+```
+
+**Output (Error):** `IntakeError` (e.g., submission not in `needs_review` state)
+
+**Example (Approval):**
+```typescript
+// Human reviewer approves
+const result = await review({
+  submissionId: "sub_def456",
+  decision: "approved",
+  actor: { kind: "human", id: "reviewer_alice", name: "Alice Smith" }
+});
+
+// Response (auto-finalized after approval)
+{
+  ok: true,
+  submissionId: "sub_def456",
+  state: "finalized",
+  resumeToken: "rtok_v5_z3a4b5c6",
+  version: 5,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  decision: "approved",
+  reviewedAt: "2026-01-29T11:30:00Z",
+  reviewedBy: { kind: "human", id: "reviewer_alice", name: "Alice Smith" },
+  finalizedAt: "2026-01-29T11:30:01Z"
+}
+```
+
+**Example (Rejection):**
+```typescript
+// Human reviewer rejects
+const result = await review({
+  submissionId: "sub_ghi789",
+  decision: "rejected",
+  reasons: ["Tax ID format is invalid", "W-9 signature is missing"],
+  actor: { kind: "human", id: "reviewer_bob", name: "Bob Jones" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_ghi789",
+  state: "rejected",
+  resumeToken: "rtok_v4_a4b5c6d7",
+  version: 4,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  decision: "rejected",
+  reviewedAt: "2026-01-29T11:35:00Z",
+  reviewedBy: { kind: "human", id: "reviewer_bob", name: "Bob Jones" },
+  reasons: ["Tax ID format is invalid", "W-9 signature is missing"]
+}
+```
 
 ### 4.8 `cancel`
 
-Cancels a submission. Irreversible.
+Cancels a submission. Irreversible. Does not require a resume token (submissionId-based access).
 
 **Input:**
 ```typescript
@@ -467,13 +894,226 @@ Cancels a submission. Irreversible.
 }
 ```
 
+**Output (Success):**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  state: "cancelled";
+  resumeToken: string;             // Final resume token (no further operations allowed)
+  version: number;                 // Incremented version
+  tokenExpiresAt: string;
+  cancelledAt: string;             // ISO 8601 timestamp
+  cancelledBy: Actor;
+  reason?: string;
+}
+```
+
+**Example:**
+```typescript
+// Cancel a submission
+const result = await cancel({
+  submissionId: "sub_jkl012",
+  reason: "Vendor decided not to proceed",
+  actor: { kind: "human", id: "user_charlie", name: "Charlie Brown" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_jkl012",
+  state: "cancelled",
+  resumeToken: "rtok_v3_b5c6d7e8",  // Final token (expired)
+  version: 3,
+  tokenExpiresAt: "2026-01-29T10:10:00Z",  // Immediately expired
+  cancelledAt: "2026-01-29T10:10:00Z",
+  cancelledBy: { kind: "human", id: "user_charlie", name: "Charlie Brown" },
+  reason: "Vendor decided not to proceed"
+}
+```
+
 ### 4.9 `getSubmission`
 
-Retrieves current submission state, fields, and metadata.
+Retrieves current submission state, fields, and metadata. Supports two access patterns:
+
+1. **Submission ID-based access**: For actors with direct access (e.g., admins, creators)
+2. **Resume token-based access**: For resuming work with just the resume token (e.g., agent handoff to human)
+
+**Input (Submission ID-based):**
+```typescript
+{
+  submissionId: string;
+  actor: Actor;
+}
+```
+
+**Input (Resume token-based):**
+```typescript
+{
+  resumeToken: string;  // Access submission using only the resume token
+}
+```
+
+**Output:**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  intakeId: string;
+  state: SubmissionState;
+  resumeToken: string;             // Current resume token
+  version: number;                 // Current version
+  tokenExpiresAt: string;          // ISO 8601 timestamp
+  fields: Record<string, unknown>; // Current field values
+  schema: JSONSchema;              // The intake schema
+  createdAt: string;
+  updatedAt: string;
+  createdBy: Actor;
+  lastUpdatedBy: Actor;
+  submittedAt?: string;
+  finalizedAt?: string;
+  expiresAt?: string;
+  missingFields?: string[];        // Fields needed for submission
+  validationErrors?: FieldError[];
+}
+```
+
+**Example (Submission ID-based access):**
+```typescript
+// Get submission by ID (requires authorization)
+const result = await getSubmission({
+  submissionId: "sub_abc123",
+  actor: { kind: "agent", id: "onboarding_bot" }
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  intakeId: "intake_vendor_onboarding",
+  state: "in_progress",
+  resumeToken: "rtok_v4_d4e5f6g7",
+  version: 4,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: { legal_name: "Acme Corp", country: "US", /* ... */ },
+  schema: { /* full JSON Schema */ },
+  createdAt: "2026-01-29T10:00:00Z",
+  updatedAt: "2026-01-29T10:04:30Z",
+  createdBy: { kind: "agent", id: "onboarding_bot" },
+  lastUpdatedBy: { kind: "agent", id: "onboarding_bot" },
+  expiresAt: "2026-02-05T10:00:00Z",
+  missingFields: []
+}
+```
+
+**Example (Resume token-based access):**
+```typescript
+// Get submission using only resume token (e.g., human resuming agent's work)
+// The resume token acts as a scoped access credential
+const result = await getSubmission({
+  resumeToken: "rtok_v4_d4e5f6g7"
+});
+
+// Response (same as above)
+{
+  ok: true,
+  submissionId: "sub_abc123",  // Submission ID revealed via token
+  intakeId: "intake_vendor_onboarding",
+  state: "in_progress",
+  resumeToken: "rtok_v4_d4e5f6g7",  // Same token (not rotated for read-only ops)
+  version: 4,
+  tokenExpiresAt: "2026-01-30T10:00:00Z",
+  fields: { legal_name: "Acme Corp", country: "US", /* ... */ },
+  schema: { /* full JSON Schema */ },
+  createdAt: "2026-01-29T10:00:00Z",
+  updatedAt: "2026-01-29T10:04:30Z",
+  createdBy: { kind: "agent", id: "onboarding_bot" },
+  lastUpdatedBy: { kind: "agent", id: "onboarding_bot" },
+  expiresAt: "2026-02-05T10:00:00Z",
+  missingFields: []
+}
+```
+
+**Use Cases for Resume Token-based Access:**
+
+1. **Agent-to-Human Handoff**: Agent generates a form link with embedded resume token
+2. **Session Recovery**: User closes browser, returns later with token from email/bookmark
+3. **Cross-Device**: Start on mobile, resume on desktop using the same token
+4. **Delegated Access**: Share a token for limited-scope collaboration without sharing credentials
 
 ### 4.10 `getEvents`
 
-Retrieves the event stream for a submission (see §6).
+Retrieves the event stream for a submission (see §6). Supports both submission ID-based and resume token-based access.
+
+**Input (Submission ID-based):**
+```typescript
+{
+  submissionId: string;
+  afterEventId?: string;  // For pagination: get events after this ID
+  limit?: number;         // Max events to return (default: 100)
+  actor: Actor;
+}
+```
+
+**Input (Resume token-based):**
+```typescript
+{
+  resumeToken: string;    // Access using resume token
+  afterEventId?: string;
+  limit?: number;
+}
+```
+
+**Output:**
+```typescript
+{
+  ok: true;
+  submissionId: string;
+  events: IntakeEvent[];  // Array of events (see §6)
+  hasMore: boolean;       // True if more events available
+  nextEventId?: string;   // Use as afterEventId for next page
+}
+```
+
+**Example:**
+```typescript
+// Get all events for a submission
+const result = await getEvents({
+  resumeToken: "rtok_v4_d4e5f6g7",
+  limit: 50
+});
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_abc123",
+  events: [
+    {
+      eventId: "evt_001",
+      type: "submission.created",
+      submissionId: "sub_abc123",
+      ts: "2026-01-29T10:00:00Z",
+      actor: { kind: "agent", id: "onboarding_bot" },
+      state: "draft",
+      payload: { intakeId: "intake_vendor_onboarding" }
+    },
+    {
+      eventId: "evt_002",
+      type: "field.updated",
+      submissionId: "sub_abc123",
+      ts: "2026-01-29T10:00:01Z",
+      actor: { kind: "agent", id: "onboarding_bot" },
+      state: "in_progress",
+      payload: {
+        fields: { legal_name: "Acme Corp", country: "US" },
+        version: 1
+      }
+    },
+    // ... more events
+  ],
+  hasMore: false
+}
+```
 
 ---
 
@@ -515,7 +1155,6 @@ interface IntakeEvent {
 | Event Type | Emitted When |
 |---|---|
 | `submission.created` | New submission created |
-| `submission.replayed` | Cached submission returned via idempotent replay |
 | `field.updated` | One or more fields set/changed |
 | `validation.passed` | Validation succeeds (all fields valid) |
 | `validation.failed` | Validation finds issues |
@@ -558,14 +1197,113 @@ The canonical serialization is JSONL (one JSON object per line). Example:
 
 ### 7.1 Resume Tokens
 
-Every submission has a `resumeToken` — an opaque string that represents the current checkpoint. Resume tokens:
+Every submission has a `resumeToken` — an opaque string that represents the current checkpoint and enables optimistic concurrency control.
+
+#### 7.1.1 Token Format and Properties
+
+Resume tokens are **opaque strings** with the following characteristics:
+
+- **Format:** Implementation-defined (e.g., `rtok_a1b2c3d4e5f6`, UUID, or base64-encoded structure)
+- **Opacity:** Clients MUST treat tokens as opaque. The internal structure is not part of the contract.
+- **Uniqueness:** Each token uniquely identifies a specific version of a submission's state
+- **Single-use:** Tokens are invalidated after the next state mutation
+- **Scope:** Bound to a specific `submissionId`
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §3](./RESUME_TOKENS_DESIGN.md#3-token-format-and-generation) for detailed token format specification, generation algorithms, and security considerations.
+
+#### 7.1.2 Token Lifecycle
+
+Resume tokens:
 
 - Are returned on every successful operation and in every error response
-- MUST be passed on subsequent operations (optimistic concurrency)
-- Are rotated on every state change (stale tokens are rejected with `conflict`)
-- Allow different actors to hand off work (agent starts → human continues → agent resumes)
+- MUST be passed on subsequent mutating operations (`setFields`, `submit`, etc.)
+- Are rotated on every state change — the server returns a new token, and the old token becomes stale
+- Expire when the associated submission reaches a terminal state (`finalized`, `cancelled`, `expired`)
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §2.2](./RESUME_TOKENS_DESIGN.md#22-token-lifecycle) for complete token lifecycle management including rotation strategies and expiration policies.
+
+#### 7.1.3 Version and Concurrency Control (ETag Mechanism)
+
+Resume tokens function as ETags for optimistic concurrency:
+
+```typescript
+// Operation 1: Agent sets fields
+setFields({ submissionId: "sub_01", resumeToken: "rtok_v1", fields: {...} })
+// → Returns { ok: true, resumeToken: "rtok_v2", ... }
+
+// Operation 2: Concurrent update with stale token
+setFields({ submissionId: "sub_01", resumeToken: "rtok_v1", fields: {...} })
+// → Returns IntakeError { error: { type: "conflict", message: "Resume token is stale" } }
+```
+
+When a stale token is detected:
+- The operation is rejected with `error.type = "conflict"`
+- The response includes the current `resumeToken` so the caller can retry
+- The caller MUST fetch the latest submission state before retrying
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §4](./RESUME_TOKENS_DESIGN.md#4-optimistic-concurrency-control-and-versioning) for ETag-style versioning, conflict detection algorithms, and resolution patterns.
+
+#### 7.1.4 Token Expiration Behavior
+
+When a resume token is used after its associated submission has expired or been deleted:
+
+**HTTP/JSON Binding:**
+```http
+PATCH /submissions/sub_01/fields
+{
+  "resumeToken": "rtok_expired",
+  "fields": {...}
+}
+
+HTTP/1.1 410 Gone
+Content-Type: application/json
+
+{
+  "ok": false,
+  "submissionId": "sub_01",
+  "state": "expired",
+  "error": {
+    "type": "expired",
+    "message": "Submission has expired. Create a new submission to continue.",
+    "retryable": false
+  }
+}
+```
+
+**MCP Tool Binding:**
+Returns an error result with `type: "expired"` and `retryable: false`.
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §5](./RESUME_TOKENS_DESIGN.md#5-token-storage-expiration-and-lifecycle-management) for storage architecture, TTL configuration, expiration behavior, and cleanup strategies.
+
+#### 7.1.5 Multi-Actor Handoff
+
+Resume tokens allow different actors to hand off work seamlessly:
+
+```
+Agent creates submission → gets resumeToken_1
+Agent sets fields         → gets resumeToken_2
+Agent generates form link → includes resumeToken_2 (or session binding)
+Human opens form          → form loads from resumeToken_2
+Human fills fields        → resumeToken_3 issued
+Agent calls getSubmission → sees updated fields, gets resumeToken_3
+Agent calls submit        → uses resumeToken_3
+```
+
+Each actor uses the latest token they received. The submission state remains consistent regardless of which actor performs the next operation.
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §6](./RESUME_TOKENS_DESIGN.md#6-cross-actor-handoff-and-authentication-bypass) for detailed cross-actor handoff flows, authentication bypass rationale, and security best practices.
+
+#### 7.1.6 Implementation Notes
+
+For detailed design considerations, storage strategies, security requirements, and reference implementations, see:
+
+**→** [`docs/RESUME_TOKENS_DESIGN.md`](./RESUME_TOKENS_DESIGN.md)
 
 ### 7.2 Handoff Flow
+
+The handoff flow enables seamless collaboration between agents and humans. Resume tokens serve as checkpoints that any authorized actor can use to continue work from where another left off.
+
+#### 7.2.1 Basic Handoff Sequence
 
 ```
 Agent creates submission → gets resumeToken_1
@@ -577,1324 +1315,328 @@ Agent calls getSubmission → sees updated fields, gets resumeToken_3
 Agent calls submit        → uses resumeToken_3
 ```
 
+#### 7.2.2 Step-by-Step Example with Token Passing
+
+**Scenario:** Agent collects basic info, hands off to human for sensitive data (SSN, tax documents), then completes submission.
+
+**Step 1: Agent Creates Submission**
+```typescript
+// Agent call
+createSubmission({
+  intakeId: "vendor_onboarding",
+  actor: { kind: "agent", id: "onboarding_bot" },
+  initialFields: {
+    legal_name: "Acme Corp",
+    country: "US"
+  }
+})
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_a1b2c3",
+  state: "in_progress",
+  resumeToken: "rtok_v1_a1b2c3_ts1706529600",
+  schema: { ... },
+  missingFields: ["tax_id", "w9_form", "contact_email"]
+}
+```
+
+**Step 2: Agent Sets Additional Fields**
+```typescript
+// Agent call (using token from step 1)
+setFields({
+  submissionId: "sub_a1b2c3",
+  resumeToken: "rtok_v1_a1b2c3_ts1706529600",
+  actor: { kind: "agent", id: "onboarding_bot" },
+  fields: {
+    contact_email: "finance@acme.corp"
+  }
+})
+
+// Response (note new token)
+{
+  ok: true,
+  submissionId: "sub_a1b2c3",
+  state: "in_progress",
+  resumeToken: "rtok_v2_a1b2c3_ts1706529601",
+  updatedFields: ["contact_email"],
+  missingFields: ["tax_id", "w9_form"]
+}
+```
+
+**Step 3: Agent Generates Resume URL for Human**
+```typescript
+// Pattern for resume URL generation
+const resumeUrl = `https://formbridge.app/resume/${submissionId}/${resumeToken}`;
+// Example: https://formbridge.app/resume/sub_a1b2c3/rtok_v2_a1b2c3_ts1706529601
+
+// Or with session binding (more secure for long-lived handoffs)
+const sessionUrl = `https://formbridge.app/resume/${submissionId}?session=${sessionId}`;
+// Server binds session to current resumeToken, rotates token on session operations
+```
+
+**Step 4: Human Opens Form and Fills Missing Fields**
+```typescript
+// Human opens URL, form loads current state using resumeToken
+// Form UI makes update call:
+setFields({
+  submissionId: "sub_a1b2c3",
+  resumeToken: "rtok_v2_a1b2c3_ts1706529601",
+  actor: { kind: "human", id: "user_john", name: "John Doe" },
+  fields: {
+    tax_id: "12-3456789",
+    w9_form: { uploadId: "upl_xyz", filename: "w9.pdf" }
+  }
+})
+
+// Response (new token after human update)
+{
+  ok: true,
+  submissionId: "sub_a1b2c3",
+  state: "in_progress",
+  resumeToken: "rtok_v3_a1b2c3_ts1706529700",
+  updatedFields: ["tax_id", "w9_form"],
+  missingFields: []
+}
+```
+
+**Step 5: Agent Resumes and Completes Submission**
+```typescript
+// Agent polls or receives webhook notification that human completed their part
+getSubmission({ submissionId: "sub_a1b2c3" })
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_a1b2c3",
+  state: "in_progress",
+  resumeToken: "rtok_v3_a1b2c3_ts1706529700",
+  fields: {
+    legal_name: "Acme Corp",
+    country: "US",
+    contact_email: "finance@acme.corp",
+    tax_id: "12-3456789",
+    w9_form: { uploadId: "upl_xyz", filename: "w9.pdf" }
+  },
+  missingFields: []
+}
+
+// Agent validates and submits
+submit({
+  submissionId: "sub_a1b2c3",
+  resumeToken: "rtok_v3_a1b2c3_ts1706529700",
+  idempotencyKey: "idem_onboarding_bot_acme_final",
+  actor: { kind: "agent", id: "onboarding_bot" }
+})
+
+// Response
+{
+  ok: true,
+  submissionId: "sub_a1b2c3",
+  state: "submitted",
+  resumeToken: "rtok_v4_a1b2c3_ts1706529701"
+}
+```
+
+#### 7.2.3 Version Rotation on Each Operation
+
+Every mutating operation returns a **new** resume token. The previous token becomes stale immediately.
+
+**Version Progression Example:**
+```
+Operation                           Token Returned              State
+──────────────────────────────────────────────────────────────────────────────
+createSubmission()                  rtok_v1_sub123_ts001        draft
+setFields({ country: "US" })        rtok_v2_sub123_ts002        in_progress
+setFields({ legal_name: "Acme" })   rtok_v3_sub123_ts003        in_progress
+requestUpload("w9_form", ...)       rtok_v4_sub123_ts004        awaiting_upload
+confirmUpload(uploadId)             rtok_v5_sub123_ts005        in_progress
+submit()                            rtok_v6_sub123_ts006        submitted
+review({ decision: "approved" })    rtok_v7_sub123_ts007        approved
+[delivery succeeds]                 rtok_v8_sub123_ts008        finalized
+```
+
+**Why Rotation Matters:**
+- Prevents race conditions when multiple actors access the same submission
+- Each actor must use the latest token they received
+- Stale tokens are rejected with `conflict` error, forcing caller to fetch latest state
+
+#### 7.2.4 Conflict Detection Example
+
+**Scenario:** Agent and human both try to update the same submission concurrently.
+
+**Initial State:**
+- Submission `sub_abc` is at `rtok_v5`
+- Agent has `rtok_v5`
+- Human has `rtok_v5` (loaded the form a minute ago)
+
+**Timeline:**
+
+```
+T1: Agent calls setFields with rtok_v5 → succeeds, returns rtok_v6
+T2: Human calls setFields with rtok_v5 → CONFLICT (token is stale)
+```
+
+**Human's Request (T2):**
+```typescript
+setFields({
+  submissionId: "sub_abc",
+  resumeToken: "rtok_v5",  // ← This is now stale
+  actor: { kind: "human", id: "user_jane" },
+  fields: { contact_email: "jane@example.com" }
+})
+```
+
+**Error Response:**
+```typescript
+{
+  ok: false,
+  submissionId: "sub_abc",
+  state: "in_progress",
+  resumeToken: "rtok_v6",  // ← The current valid token
+  error: {
+    type: "conflict",
+    message: "Resume token is stale. Another actor has modified this submission.",
+    retryable: true,
+    nextActions: [
+      {
+        action: "fetch_current_state",
+        hint: "Call getSubmission() to retrieve the latest state and resumeToken, then retry your operation."
+      }
+    ]
+  }
+}
+```
+
+**Human's Recovery:**
+```typescript
+// Step 1: Fetch current state
+const current = await getSubmission({ submissionId: "sub_abc" });
+// Returns: { resumeToken: "rtok_v6", fields: { ... agent's changes ... } }
+
+// Step 2: Merge changes (application logic)
+const mergedFields = {
+  ...current.fields,
+  contact_email: "jane@example.com"  // Human's intended change
+};
+
+// Step 3: Retry with current token
+setFields({
+  submissionId: "sub_abc",
+  resumeToken: "rtok_v6",  // ← Now using the current token
+  actor: { kind: "human", id: "user_jane" },
+  fields: { contact_email: "jane@example.com" }
+})
+// → Succeeds, returns rtok_v7
+```
+
+#### 7.2.5 Resume URL Generation Patterns
+
+**Pattern 1: Direct Token Embedding (Simple, Short-Lived)**
+```typescript
+// Best for: Immediate handoffs (agent → human within minutes)
+const resumeUrl = `${baseUrl}/resume/${submissionId}/${resumeToken}`;
+// Example: https://formbridge.app/resume/sub_123/rtok_v2_123_ts001
+
+// Security: Token visible in URL, short TTL recommended
+// Expiration: Token expires when submission state changes or reaches terminal state
+```
+
+**Pattern 2: Session Binding (Secure, Long-Lived)**
+```typescript
+// Best for: Email links, async handoffs, multi-day workflows
+// Step 1: Create a session that binds to current resumeToken
+const session = await createResumeSession({
+  submissionId: "sub_123",
+  resumeToken: "rtok_v2_123_ts001",
+  expiresInMs: 86400000,  // 24 hours
+  allowedActors: [{ kind: "human", id: "user_jane" }]
+});
+
+// Step 2: Generate URL with session ID (not token)
+const resumeUrl = `${baseUrl}/resume/${submissionId}?session=${session.id}`;
+// Example: https://formbridge.app/resume/sub_123?session=sess_abc123
+
+// Security: Token not in URL; session validates actor and proxies to current token
+// Expiration: Session has independent TTL; survives token rotations
+```
+
+**Pattern 3: Magic Link with OTP (Highest Security)**
+```typescript
+// Best for: Sensitive data, compliance workflows, email-only access
+// Step 1: Generate magic link with short-lived OTP
+const magicLink = await createMagicLink({
+  submissionId: "sub_123",
+  resumeToken: "rtok_v2_123_ts001",
+  recipientEmail: "jane@example.com",
+  expiresInMs: 600000  // 10 minutes
+});
+
+// Step 2: Send email with link
+const resumeUrl = `${baseUrl}/resume/${submissionId}?code=${magicLink.code}`;
+// Example: https://formbridge.app/resume/sub_123?code=1a2b3c
+
+// Step 3: User clicks link, enters email to verify
+// Server validates email + code, issues session bound to resumeToken
+
+// Security: Code single-use, email verification required
+// Expiration: Code expires quickly; session created after verification
+```
+
+**Pattern 4: QR Code for In-Person Handoff**
+```typescript
+// Best for: Kiosk, in-person onboarding, device-to-device transfer
+const qrData = {
+  type: "formbridge_resume",
+  submissionId: "sub_123",
+  resumeToken: "rtok_v2_123_ts001",
+  intakeId: "vendor_onboarding",
+  expiresAt: "2026-01-29T12:00:00Z"
+};
+
+// Generate QR code encoding JSON
+const qrCode = generateQRCode(JSON.stringify(qrData));
+
+// Scanning device reconstructs URL or directly resumes via API
+const resumeUrl = `${baseUrl}/resume/${qrData.submissionId}/${qrData.resumeToken}`;
+```
+
+**Comparison Table:**
+
+| Pattern | Security | TTL | Use Case |
+|---|---|---|---|
+| Direct Token | Low | Short (minutes) | Immediate agent→human handoff, same session |
+| Session Binding | Medium | Long (hours/days) | Email links, async workflows |
+| Magic Link + OTP | High | Very short code + long session | Sensitive data, compliance, verified access |
+| QR Code | Medium | Short (minutes) | In-person, kiosk, device-to-device |
+
+**Implementation Recommendation:**
+- Default to **Session Binding** for most handoffs
+- Use **Magic Link + OTP** when handling PII, financial data, or regulatory requirements
+- Use **Direct Token** only for real-time agent→human handoffs within the same session context
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §6.4](./RESUME_TOKENS_DESIGN.md#64-cross-actor-handoff-flows) and [§6.5](./RESUME_TOKENS_DESIGN.md#65-url-generation-for-human-access) for detailed handoff implementation patterns, URL generation strategies, and security considerations.
+
 ---
 
 ## 8. Idempotency
 
 ### 8.1 Creation Idempotency
 
-`createSubmission` accepts an optional `idempotencyKey` to prevent duplicate submission creation. This allows callers to safely retry failed requests without creating multiple submissions for the same logical operation.
-
-#### Semantics
-
-When `createSubmission` is called with an `idempotencyKey`:
-
-1. **First call:** Server creates a new submission, associates the key with the `submissionId`, and returns the submission details.
-
-2. **Duplicate call (same key, same payload):** Server detects the existing submission, returns the current state of that submission (same `submissionId`). No new submission is created.
-
-3. **Conflicting call (same key, different payload):** Server detects a mismatch between the stored payload and the new request. Returns a `conflict` error with details.
-
-#### Duplicate Detection
-
-The server MUST:
-- Store the mapping of `idempotencyKey → submissionId` when a submission is created with a key
-- Hash or compare the request payload (`intakeId`, `actor`, `initialFields`, `ttlMs`) to detect conflicts
-- Retain the key mapping until the submission reaches a terminal state (`finalized`, `cancelled`, `expired`)
-- After terminal state, MAY purge the key (allowing reuse) or reject reuse depending on implementation policy
-
-The server SHOULD NOT:
-- Create idempotency keys automatically — keys are caller-provided
-- Perform idempotency checks if no `idempotencyKey` is provided
-
-#### Response Format
-
-**Success (new submission created):**
-```typescript
-{
-  ok: true;
-  submissionId: string;             // Newly generated ID
-  state: "draft" | "in_progress";
-  resumeToken: string;
-  schema: JSONSchema;
-  missingFields?: string[];
-  _idempotent: false;               // Indicates this was a new creation
-}
-```
-
-**Success (duplicate detected, returning existing):**
-```typescript
-{
-  ok: true;
-  submissionId: string;             // Existing submission ID
-  state: SubmissionState;           // Current state (may have progressed)
-  resumeToken: string;              // Current resume token
-  schema: JSONSchema;
-  missingFields?: string[];
-  _idempotent: true;                // Indicates this was an idempotent return
-}
-```
-
-**Error (conflicting payload):**
-```typescript
-{
-  ok: false;
-  submissionId: string;             // The existing submission ID
-  state: SubmissionState;           // Current state of existing submission
-  resumeToken: string;
-  error: {
-    type: "conflict";
-    message: "Idempotency key already used with different payload";
-    retryable: false;
-    nextActions: [
-      {
-        action: "cancel";
-        hint: "Use a different idempotency key, or fetch the existing submission and resume it."
-      }
-    ];
-  };
-}
-```
-
-#### Examples
-
-**Example 1: First creation**
-
-```bash
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "idempotencyKey": "idem_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot",
-      "name": "Vendor Onboarding Agent"
-    },
-    "initialFields": {
-      "legal_name": "Acme Corp",
-      "country": "US"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": true,
-  "submissionId": "sub_xyz789",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "schema": { ... },
-  "missingFields": ["tax_id", "address", "contact_email"],
-  "_idempotent": false
-}
-```
-
-**Example 2: Retry with same key (network failure recovery)**
-
-```bash
-# Agent retries the exact same request after a network timeout
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "idempotencyKey": "idem_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot",
-      "name": "Vendor Onboarding Agent"
-    },
-    "initialFields": {
-      "legal_name": "Acme Corp",
-      "country": "US"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": true,
-  "submissionId": "sub_xyz789",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "schema": { ... },
-  "missingFields": ["tax_id", "address", "contact_email"],
-  "_idempotent": true
-}
-```
-
-**Example 3: Conflict (same key, different payload)**
-
-```bash
-# Agent mistakenly reuses the key for a different vendor
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "idempotencyKey": "idem_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    },
-    "initialFields": {
-      "legal_name": "Different Corp",
-      "country": "CA"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": false,
-  "submissionId": "sub_xyz789",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "error": {
-    "type": "conflict",
-    "message": "Idempotency key 'idem_abc123' already used with different payload",
-    "retryable": false,
-    "nextActions": [
-      {
-        "action": "cancel",
-        "hint": "Use a different idempotency key, or fetch the existing submission and resume it."
-      }
-    ]
-  }
-}
-```
-
-#### Key Generation Recommendations
-
-**For agents:**
-- Use a unique identifier tied to the workflow instance: `{workflow_id}_{step}`
-- Include a timestamp or UUID for uniqueness: `idem_{uuid}`
-- Store the key with the workflow state to enable safe retries
-
-**For humans (via form UI):**
-- Generate a key on form load and include it in a hidden field
-- Regenerate if the user explicitly starts a "new" submission
-
-**Key format:**
-- Printable ASCII, 1-255 characters
-- Recommended prefix: `idem_` for clarity
-- Avoid PII or sensitive data in the key itself
+`createSubmission` accepts an optional `idempotencyKey`. If a submission with the same key already exists:
+- Return the existing submission (same `submissionId`, current state)
+- Do NOT create a duplicate
 
 ### 8.2 Submission Idempotency
 
-`submit` REQUIRES an `idempotencyKey` to prevent duplicate submissions. This allows callers to safely retry failed submission requests without risk of creating duplicate finalized records or triggering duplicate delivery actions.
+`submit` REQUIRES an `idempotencyKey`. If the same key is reused:
+- With the same payload: return the existing result (success or error)
+- With a different payload: return `conflict` error
 
-#### Semantics
+### 8.3 Key Format
 
-When `submit` is called with an `idempotencyKey`:
-
-1. **First call:** Server validates fields, transitions submission to `submitted` (or `needs_review`), records the operation result, and associates the `idempotencyKey` with the `submissionId` and submission outcome.
-
-2. **Duplicate call (same key, same payload):** Server detects the existing submission operation, returns the cached result without re-executing submission logic. The response is replayed from cache.
-
-3. **Conflicting call (same key, different payload):** Server detects a mismatch between the stored submission request and the new request. Returns a `conflict` error with details.
-
-#### Caching and Response Replay
-
-The server MUST cache the result of the first `submit` call with a given `idempotencyKey` and replay that result on subsequent requests with the same key. This cache MUST include:
-
-- The final outcome: success response or error response
-- The submission state after the operation
-- The current `resumeToken`
-- Any side effects that were triggered (e.g., delivery attempts, state transitions)
-
-**Critical:** The cache ensures that retrying a `submit` operation:
-- Does NOT re-execute validation logic (which could have different results if data changed)
-- Does NOT trigger duplicate delivery attempts to the destination
-- Does NOT create duplicate audit events beyond the original operation
-- Returns EXACTLY the same response as the original call
-
-The server MUST include an `Idempotent-Replayed` header (or equivalent transport-specific indicator) in replayed responses:
-
-```
-Idempotent-Replayed: true
-```
-
-When this header is present, clients know the response is a cached replay of a previous operation, not a new execution.
-
-#### Duplicate Detection
-
-The server MUST:
-- Store the mapping of `idempotencyKey → (submissionId, cached_response)` when `submit` is called
-- Hash or compare the request payload (`submissionId`, `resumeToken`, `actor`) to detect conflicts
-- Retain the key mapping and cached response until:
-  - The submission reaches a terminal state (`finalized`, `cancelled`, `expired`), AND
-  - A retention period has elapsed (implementation-defined, recommended: 24 hours after terminal state)
-- After expiry, MAY purge the cache to allow key reuse
-
-The server SHOULD NOT:
-- Accept `submit` calls without an `idempotencyKey` — the key is required
-- Cache operations other than `submit` with the submission idempotency key (creation has separate idempotency, see §8.1)
-
-#### Conflict Detection
-
-A conflict occurs when the same `idempotencyKey` is used with different request parameters. The server MUST detect conflicts on:
-
-- `submissionId`: Different submission being submitted with same key
-- `resumeToken`: Same submission but from a different state checkpoint
-- `actor`: Different actor attempting submission (optional check, implementation-dependent)
-
-When a conflict is detected, the server MUST NOT execute the submission and MUST return a `conflict` error.
-
-#### Response Format
-
-**Success (first submission):**
-```typescript
-{
-  ok: true;
-  submissionId: string;
-  state: "submitted" | "needs_review" | "finalized";  // Depends on gate configuration
-  resumeToken: string;                                // New token after state transition
-  _idempotent: false;                                 // Indicates new execution
-}
-```
-
-**Success (replayed response):**
-```typescript
-{
-  ok: true;
-  submissionId: string;
-  state: "submitted" | "needs_review" | "finalized";
-  resumeToken: string;                                // Token from original execution
-  _idempotent: true;                                  // Indicates cached replay
-}
-```
-
-**Note:** When using HTTP/JSON binding, replayed responses include header `Idempotent-Replayed: true`.
-
-**Error (conflicting payload):**
-```typescript
-{
-  ok: false;
-  submissionId: string;
-  state: SubmissionState;                             // Current state
-  resumeToken: string;                                // Current resume token
-  error: {
-    type: "conflict";
-    message: "Idempotency key already used for different submission or state";
-    retryable: false;
-    nextActions: [
-      {
-        action: "cancel";
-        hint: "Use a different idempotency key, or fetch current submission state to get the correct resumeToken."
-      }
-    ];
-  };
-}
-```
-
-#### Examples
-
-**Example 1: First submission**
-
-```bash
-curl -X POST https://api.formbridge.example/submissions/sub_xyz789/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "submissionId": "sub_xyz789",
-    "resumeToken": "rtok_003",
-    "idempotencyKey": "submit_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": true,
-  "submissionId": "sub_xyz789",
-  "state": "submitted",
-  "resumeToken": "rtok_004",
-  "_idempotent": false
-}
-```
-
-**Example 2: Retry with same key (network timeout recovery)**
-
-```bash
-# Agent retries after network timeout, same request
-curl -X POST https://api.formbridge.example/submissions/sub_xyz789/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "submissionId": "sub_xyz789",
-    "resumeToken": "rtok_003",
-    "idempotencyKey": "submit_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response:**
-```
-Idempotent-Replayed: true
-
-{
-  "ok": true,
-  "submissionId": "sub_xyz789",
-  "state": "submitted",
-  "resumeToken": "rtok_004",
-  "_idempotent": true
-}
-```
-
-**Example 3: Conflict (same key, different resumeToken)**
-
-```bash
-# Agent mistakenly reuses key with stale resumeToken
-curl -X POST https://api.formbridge.example/submissions/sub_xyz789/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "submissionId": "sub_xyz789",
-    "resumeToken": "rtok_002",
-    "idempotencyKey": "submit_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": false,
-  "submissionId": "sub_xyz789",
-  "state": "submitted",
-  "resumeToken": "rtok_004",
-  "error": {
-    "type": "conflict",
-    "message": "Idempotency key 'submit_abc123' already used with different resumeToken (expected rtok_003, got rtok_002)",
-    "retryable": false,
-    "nextActions": [
-      {
-        "action": "cancel",
-        "hint": "Fetch current submission state to get the correct resumeToken, or use a new idempotency key."
-      }
-    ]
-  }
-}
-```
-
-**Example 4: Conflict (same key, different submission)**
-
-```bash
-# Agent mistakenly reuses key for different submission
-curl -X POST https://api.formbridge.example/submissions/sub_different/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -d '{
-    "submissionId": "sub_different",
-    "resumeToken": "rtok_099",
-    "idempotencyKey": "submit_abc123",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response:**
-```json
-{
-  "ok": false,
-  "submissionId": "sub_different",
-  "state": "in_progress",
-  "resumeToken": "rtok_099",
-  "error": {
-    "type": "conflict",
-    "message": "Idempotency key 'submit_abc123' already used for different submission (sub_xyz789)",
-    "retryable": false,
-    "nextActions": [
-      {
-        "action": "cancel",
-        "hint": "Use a unique idempotency key for each submission."
-      }
-    ]
-  }
-}
-```
-
-#### Key Generation Recommendations
-
-**For agents:**
-- Use a unique identifier tied to the submission: `submit_{submissionId}_{attempt}`
-- Or use a workflow-tied key: `{workflow_id}_submit`
-- Store the key with the workflow state to enable safe retries
-- Generate a new key if the submission state has changed significantly
-
-**For humans (via form UI):**
-- Generate a key when the submit button is clicked: `submit_{submissionId}_{uuid}`
-- Include it in the submission request
-- If user clicks "submit" again after an error, reuse the same key for that attempt
-
-**Key format:**
-- Printable ASCII, 1-255 characters
-- Recommended prefix: `submit_` for clarity
-- MUST be unique per logical submission operation
-- Avoid PII or sensitive data in the key itself
-
-### 8.3 Storage Backend Configuration
-
-Idempotency tracking requires persistent storage to detect duplicate requests across service restarts and distributed deployments. FormBridge defines a pluggable `IdempotencyStore` interface that implementations can adapt to their infrastructure.
-
-#### Interface
-
-```typescript
-interface IdempotencyStore {
-  // Creation idempotency (§8.1)
-  recordCreation(params: {
-    idempotencyKey: string;
-    submissionId: string;
-    payloadHash: string;          // Hash of creation request params
-    intakeId: string;
-    expiresAt: Date;
-  }): Promise<void>;
-
-  getCreation(idempotencyKey: string): Promise<{
-    submissionId: string;
-    payloadHash: string;
-    intakeId: string;
-  } | null>;
-
-  // Submission idempotency (§8.2)
-  recordSubmission(params: {
-    idempotencyKey: string;
-    submissionId: string;
-    resumeToken: string;
-    cachedResponse: unknown;      // The full response to replay
-    expiresAt: Date;
-  }): Promise<void>;
-
-  getSubmission(idempotencyKey: string): Promise<{
-    submissionId: string;
-    resumeToken: string;
-    cachedResponse: unknown;
-  } | null>;
-
-  // Cleanup
-  deleteExpiredKeys(before: Date): Promise<number>;  // Returns count deleted
-}
-```
-
-#### Default: In-Memory Store
-
-The reference implementation includes an in-memory store suitable for development and single-instance deployments:
-
-```typescript
-class InMemoryIdempotencyStore implements IdempotencyStore {
-  private creationKeys = new Map<string, CreationRecord>();
-  private submissionKeys = new Map<string, SubmissionRecord>();
-
-  // Implements interface methods with Map operations
-  // Periodically calls deleteExpiredKeys() to prevent unbounded growth
-}
-```
-
-**Limitations:**
-- Keys are lost on restart
-- Does not work with multiple service instances (race conditions possible)
-- Not suitable for production use
-
-#### Production: Redis Backend
-
-For distributed deployments, use a Redis-backed store:
-
-```typescript
-class RedisIdempotencyStore implements IdempotencyStore {
-  constructor(private redis: RedisClient) {}
-
-  async recordCreation(params) {
-    const key = `idem:create:${params.idempotencyKey}`;
-    const value = JSON.stringify({
-      submissionId: params.submissionId,
-      payloadHash: params.payloadHash,
-      intakeId: params.intakeId,
-    });
-    const ttl = Math.floor((params.expiresAt.getTime() - Date.now()) / 1000);
-    await this.redis.setex(key, ttl, value);
-  }
-
-  // Similar implementations for other methods
-}
-```
-
-**Configuration:**
-```typescript
-const store = new RedisIdempotencyStore(
-  createRedisClient({
-    host: process.env.REDIS_HOST,
-    port: parseInt(process.env.REDIS_PORT || "6379"),
-    password: process.env.REDIS_PASSWORD,
-  })
-);
-
-const intakeService = new IntakeService({ idempotencyStore: store });
-```
-
-#### Alternative: Database Backend
-
-For implementations already using PostgreSQL, MySQL, or similar:
-
-```typescript
-class DatabaseIdempotencyStore implements IdempotencyStore {
-  constructor(private db: DatabaseClient) {}
-
-  async recordCreation(params) {
-    await this.db.query(
-      `INSERT INTO idempotency_keys (key, type, submission_id, payload_hash, expires_at)
-       VALUES ($1, 'creation', $2, $3, $4)
-       ON CONFLICT (key) DO NOTHING`,
-      [params.idempotencyKey, params.submissionId, params.payloadHash, params.expiresAt]
-    );
-  }
-
-  // Similar implementations for other methods
-}
-```
-
-**Schema:**
-```sql
-CREATE TABLE idempotency_keys (
-  key VARCHAR(255) PRIMARY KEY,
-  type VARCHAR(20) NOT NULL,           -- 'creation' or 'submission'
-  submission_id VARCHAR(255) NOT NULL,
-  payload_hash VARCHAR(64),            -- For creation keys
-  resume_token VARCHAR(255),           -- For submission keys
-  cached_response JSONB,               -- For submission keys
-  created_at TIMESTAMP DEFAULT NOW(),
-  expires_at TIMESTAMP NOT NULL,
-  INDEX idx_expires_at (expires_at)
-);
-```
-
-#### Implementation Notes
-
-**TTL Management:**
-- Store TTL should match or exceed submission TTL
-- Recommended: Keep keys for 24 hours after submission reaches terminal state
-- Run periodic cleanup: `store.deleteExpiredKeys(new Date())` via cron or background task
-
-**Conflict Detection:**
-- `recordCreation` and `recordSubmission` should use atomic operations (Redis SETNX, DB INSERT ON CONFLICT)
-- Read-then-write patterns risk race conditions in distributed systems
-
-**Performance:**
-- All idempotency checks are synchronous blockers on the request path
-- Use fast key-value stores (Redis) or indexed database queries
-- Consider caching negative lookups briefly to reduce store load
-
-### 8.4 TTL and Expiration
-
-Every submission has a time-to-live (TTL) that determines how long it remains active before automatic expiration. This prevents abandoned submissions from accumulating indefinitely and ensures that stale data doesn't remain in the system.
-
-#### Default TTL
-
-The default TTL for all submissions is **24 hours** (86,400,000 milliseconds) from creation. This provides a reasonable window for most workflows while ensuring timely cleanup of incomplete work.
-
-#### Per-Intake Configuration
-
-Intake definitions can override the default TTL to match their specific requirements:
-
-```typescript
-interface IntakeDefinition {
-  // ... other fields
-  ttlMs?: number;  // Custom TTL in milliseconds
-}
-```
-
-**Examples:**
-- **Quick feedback forms:** `ttlMs: 3600000` (1 hour)
-- **Complex onboarding:** `ttlMs: 604800000` (7 days)
-- **Regulatory compliance:** `ttlMs: 2592000000` (30 days)
-
-#### Per-Submission Override
-
-Individual submissions can override both the default and intake-level TTL at creation time:
-
-```typescript
-createSubmission({
-  intakeId: "vendor_onboarding",
-  actor: { kind: "agent", id: "bot_1" },
-  ttlMs: 172800000  // 48 hours for this specific submission
-})
-```
-
-The most specific TTL takes precedence: submission-level > intake-level > system default.
-
-#### Automatic Cleanup
-
-When a submission's TTL expires:
-
-1. **State Transition:** The submission automatically transitions to the `expired` state (if not already in a terminal state)
-
-2. **Event Emission:** An `submission.expired` event is emitted to the event stream:
-   ```typescript
-   {
-     eventId: "evt_xyz",
-     type: "submission.expired",
-     submissionId: "sub_123",
-     ts: "2026-01-30T14:30:00Z",
-     actor: { kind: "system", id: "ttl_enforcer" },
-     state: "expired",
-     payload: {
-       originalState: "in_progress",
-       ttlMs: 86400000,
-       createdAt: "2026-01-29T14:30:00Z",
-       expiredAt: "2026-01-30T14:30:00Z"
-     }
-   }
-   ```
-
-3. **Resource Cleanup:** Implementations SHOULD:
-   - Mark associated file uploads for deletion (with grace period)
-   - Archive the submission data to cold storage
-   - Clean up idempotency keys after a retention period
-   - Free any locks or reservations held by the submission
-
-4. **Idempotency Key Retention:** Idempotency keys are retained for an additional grace period (recommended: 24 hours) after expiration to allow detection of late retry attempts.
-
-#### Behavior After Expiration
-
-Once a submission reaches the `expired` state:
-
-- **All operations fail:** Attempts to call `setFields`, `validate`, `submit`, or other operations on an expired submission return an `expired` error:
-  ```typescript
-  {
-    ok: false,
-    submissionId: "sub_123",
-    state: "expired",
-    resumeToken: "rtok_final",
-    error: {
-      type: "expired",
-      message: "Submission expired after 24 hours",
-      retryable: false,
-      nextActions: [
-        {
-          action: "cancel",
-          hint: "Create a new submission to restart the workflow."
-        }
-      ]
-    }
-  }
-  ```
-
-- **Resume tokens are invalidated:** The `resumeToken` from an expired submission cannot be used to perform any operations.
-
-- **Read operations permitted:** `getSubmission` and `getEvents` continue to work for audit and debugging purposes, subject to data retention policies.
-
-- **No reactivation:** Expired submissions cannot be resumed or reactivated. Callers must create a new submission and re-enter data.
-
-#### TTL Monitoring
-
-Implementations SHOULD:
-- Run a background job that checks for expired submissions at regular intervals (e.g., every 5 minutes)
-- Support TTL warnings via the event stream (optional): emit a `submission.ttl_warning` event when 80% of TTL has elapsed
-- Expose TTL information in `getSubmission` responses:
-  ```typescript
-  {
-    ok: true,
-    submissionId: "sub_123",
-    state: "in_progress",
-    resumeToken: "rtok_05",
-    ttl: {
-      expiresAt: "2026-01-30T14:30:00Z",
-      remainingMs: 21600000  // 6 hours remaining
-    }
-  }
-  ```
-
-#### Implementation Notes
-
-**TTL Clock Start:**
-- The TTL countdown begins at submission creation (`submission.created` event timestamp)
-- Updating fields or transitioning states does NOT reset the TTL
-- Only creating a new submission starts a new TTL countdown
-
-**Terminal States:**
-- Submissions in terminal states (`finalized`, `cancelled`, `expired`) do not expire further
-- Data retention policies determine how long terminal submissions are kept
-
-**Clock Skew:**
-- Implementations MUST use a consistent clock source (e.g., database server time, NTP-synced system clock)
-- TTL checks SHOULD have a small grace period (e.g., +30 seconds) to account for clock skew in distributed systems
-
-### 8.5 Concurrent Request Handling
-
-When multiple requests arrive concurrently with the same idempotency key, FormBridge implementations MUST ensure that exactly one request is processed while others are safely handled through locking and response replay. This section defines the concurrency guarantees and implementation requirements.
-
-#### Request Serialization
-
-**Guarantee:** For any given idempotency key, all requests MUST be serialized such that:
-1. Exactly one request performs the actual operation (creation or submission)
-2. All other concurrent requests wait for the first to complete, then receive the replayed response
-3. No duplicate side effects occur (e.g., multiple submissions, multiple delivery attempts)
-
-#### Locking Strategy
-
-Implementations MUST use one of the following strategies to ensure request serialization:
-
-**1. Distributed Lock (Recommended for Production)**
-
-Use a distributed locking mechanism (e.g., Redis SETNX, database row locks) to coordinate across multiple service instances:
-
-```typescript
-async function handleIdempotentRequest(idempotencyKey: string, operation: () => Promise<Response>) {
-  const lockKey = `lock:${idempotencyKey}`;
-  const lockId = generateUniqueId();
-  const lockTimeout = 30000; // 30 seconds
-
-  // Acquire lock with timeout
-  const acquired = await acquireLock(lockKey, lockId, lockTimeout);
-
-  if (!acquired) {
-    // Another request is processing; wait and retry
-    return await waitForResult(idempotencyKey, lockTimeout);
-  }
-
-  try {
-    // Check if result already exists (first request may have completed)
-    const existing = await idempotencyStore.get(idempotencyKey);
-    if (existing) {
-      return replayResponse(existing);
-    }
-
-    // Execute operation (we won the race)
-    const result = await operation();
-
-    // Store result for replays
-    await idempotencyStore.record(idempotencyKey, result);
-
-    return result;
-  } finally {
-    await releaseLock(lockKey, lockId);
-  }
-}
-```
-
-**2. Database Row Lock**
-
-For database-backed stores, use row-level locking:
-
-```sql
--- PostgreSQL example
-BEGIN;
-SELECT * FROM idempotency_keys
-WHERE key = $1
-FOR UPDATE NOWAIT;  -- Fail fast if locked
-
--- If row exists, return cached response
--- If row doesn't exist, INSERT and execute operation
-
-COMMIT;
-```
-
-**3. Single-Instance In-Memory Lock**
-
-For development or single-instance deployments, use in-memory mutexes:
-
-```typescript
-class InMemoryLockManager {
-  private locks = new Map<string, Promise<unknown>>();
-
-  async execute<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    const existing = this.locks.get(key);
-    if (existing) {
-      // Wait for in-flight request to complete
-      return await existing as T;
-    }
-
-    const promise = operation();
-    this.locks.set(key, promise);
-
-    try {
-      return await promise;
-    } finally {
-      this.locks.delete(key);
-    }
-  }
-}
-```
-
-**Note:** In-memory locks do NOT work across multiple service instances and risk duplicate processing in distributed deployments.
-
-#### Timeout Behavior
-
-**Lock Acquisition Timeout:**
-- Default: 30 seconds
-- If a lock cannot be acquired within the timeout, the request MUST fail with a retryable error:
-  ```typescript
-  {
-    ok: false,
-    error: {
-      type: "locked",
-      message: "Request with this idempotency key is currently being processed",
-      retryable: true,
-      retryAfterMs: 1000  // Suggested backoff
-    }
-  }
-  ```
-
-**Lock Hold Timeout:**
-- Maximum time a lock can be held: 30 seconds (configurable)
-- If an operation exceeds this timeout, the lock MUST be released automatically to prevent deadlocks
-- The original request SHOULD fail with an error indicating timeout
-- Subsequent requests with the same key will attempt operation again
-
-**Response Wait Timeout:**
-- When waiting for another request to complete, wait up to 30 seconds for the result
-- If the result is not available after timeout, return a retryable error
-
-#### Race Condition Prevention
-
-**Double-Check Pattern:**
-
-Even after acquiring a lock, implementations MUST check if another request has already stored a result. This handles the case where:
-1. Request A acquires lock
-2. Request B waits for lock
-3. Request A completes and stores result
-4. Request A releases lock
-5. Request B acquires lock and MUST check for existing result before re-executing
-
-```typescript
-// After acquiring lock:
-const existingResult = await idempotencyStore.get(idempotencyKey);
-if (existingResult) {
-  // Another request completed while we were waiting
-  return replayResponse(existingResult);
-}
-
-// Safe to proceed - we're the first to execute
-const result = await executeOperation();
-await idempotencyStore.record(idempotencyKey, result);
-return result;
-```
-
-**Atomic Operations:**
-
-For creation idempotency (§8.1), use atomic database operations to prevent race conditions:
-
-```sql
--- PostgreSQL example: Atomic insert-or-return
-INSERT INTO idempotency_keys (key, submission_id, payload_hash, expires_at)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (key) DO NOTHING
-RETURNING submission_id;
-
--- If RETURNING is empty, another request won the race
--- Read the existing record to get the submission_id
-```
-
-For Redis:
-```typescript
-// SETNX is atomic: returns 1 if set, 0 if key exists
-const created = await redis.setnx(`idem:create:${key}`, JSON.stringify(record));
-if (!created) {
-  // Another request won the race
-  const existing = await redis.get(`idem:create:${key}`);
-  return JSON.parse(existing);
-}
-```
-
-**Resume Token Validation:**
-
-For submission idempotency (§8.2), validate the resume token matches the stored value to detect conflicts:
-
-```typescript
-const storedSubmission = await idempotencyStore.getSubmission(idempotencyKey);
-if (storedSubmission && storedSubmission.resumeToken !== request.resumeToken) {
-  // Conflict: same key, different state checkpoint
-  return conflictError("Resume token mismatch");
-}
-```
-
-#### Queuing Behavior
-
-**Request Ordering:**
-
-When multiple requests arrive with the same idempotency key:
-1. First request: Acquires lock, executes operation, stores result
-2. Concurrent requests: Wait for lock release, then receive replayed response
-3. Late arrivals: Immediately receive replayed response if result is cached
-
-**No Guaranteed Order:**
-
-Implementations do NOT guarantee that requests are processed in arrival order. All concurrent requests receive the SAME response (the cached result), regardless of arrival order.
-
-**Fairness:**
-
-Lock acquisition SHOULD be fair (FIFO) to prevent starvation, but this is implementation-dependent. Implementations using spin-lock retries SHOULD use exponential backoff to reduce contention.
-
-#### Implementation Requirements
-
-**MUST:**
-- Serialize requests with the same idempotency key
-- Ensure exactly-once execution of side effects (submission, delivery)
-- Store cached responses atomically with the operation result
-- Release locks on timeout to prevent deadlocks
-- Handle lock acquisition failures gracefully with retryable errors
-
-**SHOULD:**
-- Use distributed locks for multi-instance deployments
-- Implement request timeout monitoring
-- Log lock contention metrics for observability
-- Use fair lock acquisition to prevent starvation
-
-**MUST NOT:**
-- Allow multiple requests with the same key to execute concurrently
-- Release locks before storing the cached response
-- Assume in-memory locks work across service instances
-
-#### Observability
-
-Implementations SHOULD emit metrics for:
-- `idempotency.lock.acquired`: Lock acquisition latency
-- `idempotency.lock.timeout`: Lock acquisition timeout count
-- `idempotency.lock.contention`: Concurrent requests for same key
-- `idempotency.cache.hit`: Replayed response count
-- `idempotency.cache.miss`: New operation execution count
-
-#### Example: Complete Flow
-
-```
-Time  Request A (key=idem_001)           Request B (key=idem_001)
-----  --------------------------------    --------------------------------
-T0    Arrives, attempts lock
-T1    Acquires lock                      Arrives, attempts lock
-T2    Checks cache (miss)                Waits for lock...
-T3    Executes createSubmission()        Waits for lock...
-T4    Stores result in cache             Waits for lock...
-T5    Releases lock                      Acquires lock
-T6    Returns response                   Checks cache (hit!)
-T7                                       Returns replayed response
-                                         Releases lock
-```
-
-**Key Points:**
-- Request B never executes `createSubmission()` — it receives the cached result from Request A
-- Both requests receive identical responses
-- The submission is created exactly once
-- All event emissions happen exactly once (during Request A's execution)
-
-### 8.6 HTTP Header Examples
-
-When using the HTTP/JSON binding, idempotency keys can be provided via the `Idempotency-Key` header instead of including them in the request body. This approach follows standard HTTP conventions and allows infrastructure (proxies, caches, load balancers) to participate in idempotency handling.
-
-#### Header Format
-
-```
-Idempotency-Key: <key>
-```
-
-Where `<key>` is a printable ASCII string, 1-255 characters, following the same format requirements as body-based keys (§8.1, §8.2).
-
-#### Example 1: Initial Request (Success)
-
-**Request:**
-```bash
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: idem_7f3a2b9c" \
-  -d '{
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot",
-      "name": "Vendor Onboarding Agent"
-    },
-    "initialFields": {
-      "legal_name": "Acme Corp",
-      "country": "US",
-      "tax_id": "12-3456789"
-    }
-  }'
-```
-
-**Response (201 Created):**
-```http
-HTTP/1.1 201 Created
-Content-Type: application/json
-X-Request-Id: req_xyz123
-
-{
-  "ok": true,
-  "submissionId": "sub_abc456",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "schema": {
-    "type": "object",
-    "properties": {
-      "legal_name": { "type": "string" },
-      "country": { "type": "string" },
-      "tax_id": { "type": "string" },
-      "address": { "type": "string" },
-      "contact_email": { "type": "string", "format": "email" }
-    },
-    "required": ["legal_name", "country", "tax_id", "address", "contact_email"]
-  },
-  "missingFields": ["address", "contact_email"],
-  "_idempotent": false
-}
-```
-
-#### Example 2: Replay with Same Payload (Network Retry)
-
-**Request (identical to Example 1):**
-```bash
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: idem_7f3a2b9c" \
-  -d '{
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot",
-      "name": "Vendor Onboarding Agent"
-    },
-    "initialFields": {
-      "legal_name": "Acme Corp",
-      "country": "US",
-      "tax_id": "12-3456789"
-    }
-  }'
-```
-
-**Response (200 OK - Cached):**
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-Idempotent-Replayed: true
-X-Request-Id: req_def789
-
-{
-  "ok": true,
-  "submissionId": "sub_abc456",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "schema": { ... },
-  "missingFields": ["address", "contact_email"],
-  "_idempotent": true
-}
-```
-
-**Key Differences:**
-- HTTP status is `200 OK` instead of `201 Created`
-- Header `Idempotent-Replayed: true` indicates this is a cached response
-- Field `_idempotent: true` confirms no new submission was created
-- Same `submissionId` and `resumeToken` as original request
-- Response returned quickly (no re-execution of business logic)
-
-#### Example 3: Conflict with Different Payload
-
-**Request (same key, different data):**
-```bash
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: idem_7f3a2b9c" \
-  -d '{
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    },
-    "initialFields": {
-      "legal_name": "Different Corp",
-      "country": "CA",
-      "tax_id": "98-7654321"
-    }
-  }'
-```
-
-**Response (409 Conflict):**
-```http
-HTTP/1.1 409 Conflict
-Content-Type: application/json
-X-Request-Id: req_ghi012
-
-{
-  "ok": false,
-  "submissionId": "sub_abc456",
-  "state": "in_progress",
-  "resumeToken": "rtok_001",
-  "error": {
-    "type": "conflict",
-    "message": "Idempotency key 'idem_7f3a2b9c' already used with different payload",
-    "retryable": false,
-    "nextActions": [
-      {
-        "action": "cancel",
-        "hint": "Generate a new idempotency key for this different submission, or retrieve the existing submission using submissionId 'sub_abc456'."
-      }
-    ]
-  }
-}
-```
-
-**Key Points:**
-- HTTP status `409 Conflict` signals payload mismatch
-- Returns the `submissionId` of the existing submission created with this key
-- Error is non-retryable — caller must choose: use new key or work with existing submission
-- Server compared payload hash and detected different `initialFields`
-
-#### Example 4: TTL Expiration During Retry
-
-**Context:** Agent created a submission, waited 25 hours (past the 24-hour default TTL), then attempted to retry creation with the same idempotency key.
-
-**Request:**
-```bash
-curl -X POST https://api.formbridge.example/intakes/vendor_onboarding/submissions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: idem_expired_001" \
-  -d '{
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    },
-    "initialFields": {
-      "legal_name": "Stale Corp",
-      "country": "US"
-    }
-  }'
-```
-
-**Response (410 Gone):**
-```http
-HTTP/1.1 410 Gone
-Content-Type: application/json
-X-Request-Id: req_jkl345
-
-{
-  "ok": false,
-  "submissionId": "sub_expired_789",
-  "state": "expired",
-  "resumeToken": "rtok_final",
-  "error": {
-    "type": "expired",
-    "message": "Submission 'sub_expired_789' expired after 24 hours. Idempotency key was retained but submission is no longer active.",
-    "retryable": false,
-    "nextActions": [
-      {
-        "action": "cancel",
-        "hint": "Create a new submission with a fresh idempotency key. The expired submission cannot be resumed."
-      }
-    ]
-  }
-}
-```
-
-**Key Points:**
-- HTTP status `410 Gone` indicates the resource expired and is no longer available
-- The idempotency key was retained past expiration (grace period) to detect this retry
-- Error type `expired` signals TTL enforcement
-- Caller must create a completely new submission with a new idempotency key
-- The expired submission's data may have been archived or deleted per retention policy
-
-#### Example 5: Submission with Idempotency-Key Header
-
-**Request:**
-```bash
-curl -X POST https://api.formbridge.example/submissions/sub_abc456/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: submit_7f3a2b9c_final" \
-  -d '{
-    "submissionId": "sub_abc456",
-    "resumeToken": "rtok_005",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response (200 OK):**
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-X-Request-Id: req_mno678
-
-{
-  "ok": true,
-  "submissionId": "sub_abc456",
-  "state": "submitted",
-  "resumeToken": "rtok_006",
-  "_idempotent": false
-}
-```
-
-#### Example 6: Submission Replay After Network Timeout
-
-**Request (identical to Example 5):**
-```bash
-curl -X POST https://api.formbridge.example/submissions/sub_abc456/submit \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer ${TOKEN}" \
-  -H "Idempotency-Key: submit_7f3a2b9c_final" \
-  -d '{
-    "submissionId": "sub_abc456",
-    "resumeToken": "rtok_005",
-    "actor": {
-      "kind": "agent",
-      "id": "onboarding_bot"
-    }
-  }'
-```
-
-**Response (200 OK - Cached):**
-```http
-HTTP/1.1 200 OK
-Content-Type: application/json
-Idempotent-Replayed: true
-X-Request-Id: req_pqr901
-
-{
-  "ok": true,
-  "submissionId": "sub_abc456",
-  "state": "submitted",
-  "resumeToken": "rtok_006",
-  "_idempotent": true
-}
-```
-
-**Key Points:**
-- Header `Idempotent-Replayed: true` confirms this is a cache replay
-- No duplicate submission processing occurred
-- No duplicate delivery attempts triggered
-- Returned exact same `state` and `resumeToken` as original request
-- Critical for preventing duplicate orders, payments, or downstream actions
-
-#### Header vs. Body Parameter
-
-Both approaches are supported. Choose based on your needs:
-
-**Header-based (`Idempotency-Key` header):**
-- ✅ Follows HTTP conventions
-- ✅ Infrastructure can participate (caching, routing)
-- ✅ Key is visible in logs without parsing body
-- ✅ Recommended for public APIs
-
-**Body-based (`idempotencyKey` field):**
-- ✅ Works with MCP tools and non-HTTP transports
-- ✅ Key travels with request payload in signed/encrypted contexts
-- ✅ No header parsing required
-- ✅ Recommended for MCP bindings
-
-Implementations SHOULD support both. If both are provided, header takes precedence.
+Idempotency keys are caller-generated opaque strings. Recommended format: `idem_{random}` or `{workflow_id}_{step}`. Keys expire after the submission is finalized or expired.
 
 ---
 
@@ -1979,6 +1721,8 @@ This spec defines semantics. Transport bindings define how these operations map 
 
 ### 12.1 HTTP/JSON Binding
 
+#### 12.1.1 Submission ID-Based Endpoints
+
 ```
 POST   /intakes/{intakeId}/submissions          → createSubmission
 PATCH  /submissions/{submissionId}/fields        → setFields
@@ -1992,9 +1736,186 @@ GET    /submissions/{submissionId}               → getSubmission
 GET    /submissions/{submissionId}/events        → getEvents
 ```
 
+#### 12.1.2 Resume Token-Based Endpoints
+
+Resume tokens enable stateless access to submissions without requiring submission IDs. These endpoints support agent-to-human handoffs and session recovery.
+
+```
+GET    /resume/{resumeToken}                     → getSubmission (by token)
+PATCH  /resume/{resumeToken}                     → setFields (by token)
+POST   /resume/{resumeToken}/validate            → validate (by token)
+POST   /resume/{resumeToken}/submit              → submit (by token)
+GET    /resume/{resumeToken}/events              → getEvents (by token)
+```
+
+**Access Pattern:**
+- Resume token-based endpoints do not require authentication beyond the token itself
+- The token acts as a scoped credential granting access to a specific submission
+- Tokens expire per `tokenExpiresAt` timestamp in the submission record
+
+**→ See also:** [RESUME_TOKENS_DESIGN.md §7](./RESUME_TOKENS_DESIGN.md#7-http-api-bindings) for complete HTTP API binding specification including error responses and CORS configuration.
+
+**Example Usage:**
+```http
+GET /resume/rtok_v4_d4e5f6g7 HTTP/1.1
+Host: api.formbridge.app
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+  "ok": true,
+  "submissionId": "sub_abc123",
+  "intakeId": "intake_vendor_onboarding",
+  "state": "in_progress",
+  "resumeToken": "rtok_v4_d4e5f6g7",
+  "version": 4,
+  "tokenExpiresAt": "2026-01-30T10:00:00Z",
+  "fields": { "legal_name": "Acme Corp", "country": "US" },
+  "schema": { /* ... */ }
+}
+```
+
+#### 12.1.3 Concurrency Control Headers
+
+All mutating operations (PATCH, POST, DELETE) support optimistic concurrency control via resume tokens and optional version headers.
+
+**Request Headers:**
+
+- **`If-Match: {resumeToken}`** — Required for all mutating operations. Ensures the operation applies to the expected state.
+- **`X-Intake-Version: {version}`** — Optional. If provided, server validates that the submission is at this exact version number before applying the mutation.
+
+**Response Headers:**
+
+- **`ETag: {resumeToken}`** — The new resume token after a successful mutation (or current token for read-only operations)
+- **`X-Intake-Version: {version}`** — Current version number after the operation
+
+**Example (Successful Update):**
+```http
+PATCH /submissions/sub_abc123/fields HTTP/1.1
+Host: api.formbridge.app
+Content-Type: application/json
+If-Match: rtok_v4_d4e5f6g7
+X-Intake-Version: 4
+
+{
+  "fields": {
+    "tax_id": "12-3456789"
+  },
+  "actor": { "kind": "agent", "id": "onboarding_bot" }
+}
+
+HTTP/1.1 200 OK
+Content-Type: application/json
+ETag: rtok_v5_e5f6g7h8
+X-Intake-Version: 5
+
+{
+  "ok": true,
+  "submissionId": "sub_abc123",
+  "state": "in_progress",
+  "resumeToken": "rtok_v5_e5f6g7h8",
+  "version": 5,
+  "tokenExpiresAt": "2026-01-30T10:00:00Z",
+  "fields": {
+    "legal_name": "Acme Corp",
+    "country": "US",
+    "tax_id": "12-3456789"
+  }
+}
+```
+
+**Example (Token Conflict):**
+```http
+PATCH /submissions/sub_abc123/fields HTTP/1.1
+Host: api.formbridge.app
+Content-Type: application/json
+If-Match: rtok_v3_c3d4e5f6
+
+{
+  "fields": { "country": "CA" },
+  "actor": { "kind": "agent", "id": "onboarding_bot" }
+}
+
+HTTP/1.1 409 Conflict
+Content-Type: application/json
+ETag: rtok_v5_e5f6g7h8
+X-Intake-Version: 5
+
+{
+  "ok": false,
+  "submissionId": "sub_abc123",
+  "state": "in_progress",
+  "resumeToken": "rtok_v5_e5f6g7h8",
+  "version": 5,
+  "error": {
+    "type": "token_conflict",
+    "message": "Resume token is stale. The submission was modified by another actor.",
+    "retryable": true,
+    "nextActions": [
+      {
+        "action": "fetch_current_state",
+        "hint": "Call getSubmission() to retrieve version 5, merge your changes, and retry with rtok_v5_e5f6g7h8."
+      }
+    ]
+  }
+}
+```
+
+**Example (Token Expired):**
+```http
+PATCH /submissions/sub_abc123/fields HTTP/1.1
+Host: api.formbridge.app
+Content-Type: application/json
+If-Match: rtok_v2_expired
+
+{
+  "fields": { "legal_name": "Acme Corp" },
+  "actor": { "kind": "agent", "id": "onboarding_bot" }
+}
+
+HTTP/1.1 410 Gone
+Content-Type: application/json
+ETag: rtok_v5_current
+X-Intake-Version: 5
+
+{
+  "ok": false,
+  "submissionId": "sub_abc123",
+  "state": "in_progress",
+  "resumeToken": "rtok_v5_current",
+  "version": 5,
+  "error": {
+    "type": "token_expired",
+    "message": "Resume token has expired. Fetch the latest submission state to continue.",
+    "retryable": false,
+    "nextActions": [
+      {
+        "action": "fetch_current_state",
+        "hint": "Call getSubmission() to retrieve the current resumeToken and retry."
+      }
+    ]
+  }
+}
+```
+
+#### 12.1.4 Status Codes
+
+| Code | Meaning | Used When |
+|---|---|---|
+| `200 OK` | Success | Operation completed successfully |
+| `201 Created` | Created | `createSubmission` succeeded |
+| `400 Bad Request` | Invalid input | Malformed request, invalid token format |
+| `404 Not Found` | Not found | Submission or resource doesn't exist |
+| `409 Conflict` | Token conflict | Resume token is stale (another operation updated state) |
+| `410 Gone` | Expired | Resume token or submission has expired |
+| `422 Unprocessable Entity` | Validation failed | Field validation errors (see `IntakeError`) |
+
 ### 12.2 MCP Tool Binding
 
-Each intake definition registers MCP tools:
+Each intake definition registers MCP tools with resume token support.
+
+#### 12.2.1 Tool Definitions
 
 ```
 formbridge_{intakeId}_create    → createSubmission
@@ -2003,212 +1924,199 @@ formbridge_{intakeId}_validate  → validate
 formbridge_{intakeId}_upload    → requestUpload
 formbridge_{intakeId}_submit    → submit
 formbridge_{intakeId}_status    → getSubmission
+formbridge_{intakeId}_events    → getEvents
 ```
 
 The tool input schemas are derived from the intake definition's JSON Schema, so agents discover fields through standard MCP `tools/list`.
 
-#### Idempotency in MCP Tools
+#### 12.2.2 Resume Token Parameters
 
-Idempotency keys are passed as arguments to MCP tools, following the same semantics as the HTTP/JSON binding (§8). The MCP server implementation handles idempotency detection and response replay transparently.
+All MCP tools accept resume tokens for stateless access and concurrency control.
 
-**Example 1: Creating a submission with idempotency key**
+**Read-Only Tools** (`validate`, `status`, `events`):
+```typescript
+{
+  // Option 1: Access by submission ID
+  submissionId: string;
+  actor: Actor;
 
+  // Option 2: Access by resume token
+  resumeToken: string;
+}
+```
+
+**Mutating Tools** (`create`, `set`, `upload`, `submit`):
+```typescript
+{
+  // Resume token (required for all operations except create)
+  resumeToken: string;
+
+  // Optional: version for double-checking
+  version?: number;
+
+  // Operation-specific fields
+  fields?: Record<string, unknown>;
+  actor: Actor;
+  // ... other parameters
+}
+```
+
+**Tool Input Schema Example** (`formbridge_vendor_onboarding_set`):
+```json
+{
+  "type": "object",
+  "properties": {
+    "resumeToken": {
+      "type": "string",
+      "description": "Current resume token for optimistic concurrency control"
+    },
+    "version": {
+      "type": "number",
+      "description": "Optional: current version number for additional conflict detection"
+    },
+    "fields": {
+      "type": "object",
+      "description": "Fields to set or update",
+      "properties": {
+        "legal_name": { "type": "string" },
+        "country": { "type": "string" },
+        "tax_id": { "type": "string" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["agent", "human", "system"] },
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    }
+  },
+  "required": ["resumeToken", "fields", "actor"]
+}
+```
+
+**Tool Output Schema** (All tools):
+```json
+{
+  "type": "object",
+  "properties": {
+    "ok": { "type": "boolean" },
+    "submissionId": { "type": "string" },
+    "state": { "type": "string" },
+    "resumeToken": { "type": "string" },
+    "version": { "type": "number" },
+    "tokenExpiresAt": { "type": "string", "format": "date-time" },
+    "error": {
+      "type": "object",
+      "description": "Present if ok=false"
+    }
+  }
+}
+```
+
+#### 12.2.3 Example MCP Tool Calls
+
+**Create Submission:**
 ```json
 {
   "method": "tools/call",
   "params": {
     "name": "formbridge_vendor_onboarding_create",
     "arguments": {
-      "idempotencyKey": "idem_agent_workflow_001",
-      "actor": {
-        "kind": "agent",
-        "id": "onboarding_agent",
-        "name": "Vendor Onboarding Assistant"
-      },
+      "intakeId": "intake_vendor_onboarding",
+      "actor": { "kind": "agent", "id": "onboarding_bot" },
       "initialFields": {
         "legal_name": "Acme Corp",
-        "country": "US",
+        "country": "US"
+      }
+    }
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"ok\":true,\"submissionId\":\"sub_abc123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_v1_a1b2c3d4\",\"version\":1,\"tokenExpiresAt\":\"2026-01-30T10:00:00Z\",\"fields\":{\"legal_name\":\"Acme Corp\",\"country\":\"US\"},\"missingFields\":[\"tax_id\",\"w9_document\"]}"
+    }
+  ]
+}
+```
+
+**Set Fields (with resume token):**
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "formbridge_vendor_onboarding_set",
+    "arguments": {
+      "resumeToken": "rtok_v1_a1b2c3d4",
+      "version": 1,
+      "fields": {
         "tax_id": "12-3456789"
-      }
-    }
-  }
-}
-```
-
-**Response (first call):**
-```json
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"ok\":true,\"submissionId\":\"sub_mcp_123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_001\",\"schema\":{...},\"missingFields\":[\"address\",\"contact_email\"],\"_idempotent\":false}"
-    }
-  ]
-}
-```
-
-**Response (replayed after retry):**
-```json
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"ok\":true,\"submissionId\":\"sub_mcp_123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_001\",\"schema\":{...},\"missingFields\":[\"address\",\"contact_email\"],\"_idempotent\":true}"
-    }
-  ],
-  "isError": false,
-  "_meta": {
-    "idempotent_replayed": true
-  }
-}
-```
-
-**Note:** The `_meta.idempotent_replayed` field (when present) indicates this is a cached response, equivalent to the `Idempotent-Replayed` HTTP header in §8.6.
-
-**Example 2: Submitting with idempotency key (required)**
-
-```json
-{
-  "method": "tools/call",
-  "params": {
-    "name": "formbridge_vendor_onboarding_submit",
-    "arguments": {
-      "submissionId": "sub_mcp_123",
-      "resumeToken": "rtok_005",
-      "idempotencyKey": "submit_agent_workflow_001_final",
-      "actor": {
-        "kind": "agent",
-        "id": "onboarding_agent"
-      }
-    }
-  }
-}
-```
-
-**Response (first call):**
-```json
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"ok\":true,\"submissionId\":\"sub_mcp_123\",\"state\":\"submitted\",\"resumeToken\":\"rtok_006\",\"_idempotent\":false}"
-    }
-  ]
-}
-```
-
-**Response (replayed after network timeout):**
-```json
-{
-  "content": [
-    {
-      "type": "text",
-      "text": "{\"ok\":true,\"submissionId\":\"sub_mcp_123\",\"state\":\"submitted\",\"resumeToken\":\"rtok_006\",\"_idempotent\":true}"
-    }
-  ],
-  "isError": false,
-  "_meta": {
-    "idempotent_replayed": true
-  }
-}
-```
-
-**Critical:** The replayed response prevents duplicate submission processing and duplicate delivery attempts to the destination webhook/API.
-
-**Example 3: Conflict detection**
-
-```json
-{
-  "method": "tools/call",
-  "params": {
-    "name": "formbridge_vendor_onboarding_create",
-    "arguments": {
-      "idempotencyKey": "idem_agent_workflow_001",
-      "actor": {
-        "kind": "agent",
-        "id": "onboarding_agent"
       },
-      "initialFields": {
-        "legal_name": "Different Corp",
-        "country": "CA"
-      }
+      "actor": { "kind": "agent", "id": "onboarding_bot" }
     }
   }
 }
 ```
 
-**Response (conflict - same key, different payload):**
+**Response (Success):**
 ```json
 {
   "content": [
     {
       "type": "text",
-      "text": "{\"ok\":false,\"submissionId\":\"sub_mcp_123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_001\",\"error\":{\"type\":\"conflict\",\"message\":\"Idempotency key 'idem_agent_workflow_001' already used with different payload\",\"retryable\":false,\"nextActions\":[{\"action\":\"cancel\",\"hint\":\"Generate a new idempotency key for this different submission, or retrieve the existing submission using submissionId 'sub_mcp_123'.\"}]}}"
+      "text": "{\"ok\":true,\"submissionId\":\"sub_abc123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_v2_b2c3d4e5\",\"version\":2,\"tokenExpiresAt\":\"2026-01-30T10:00:00Z\",\"fields\":{\"legal_name\":\"Acme Corp\",\"country\":\"US\",\"tax_id\":\"12-3456789\"},\"missingFields\":[\"w9_document\"]}"
+    }
+  ]
+}
+```
+
+**Response (Token Conflict):**
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"ok\":false,\"submissionId\":\"sub_abc123\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_v3_c3d4e5f6\",\"version\":3,\"error\":{\"type\":\"token_conflict\",\"message\":\"Resume token is stale. The submission was modified by another actor.\",\"retryable\":true,\"nextActions\":[{\"action\":\"fetch_current_state\",\"hint\":\"Call getSubmission() to retrieve version 3, merge your changes, and retry with rtok_v3_c3d4e5f6.\"}]}}"
     }
   ],
   "isError": true
 }
 ```
 
-**Example 4: Missing idempotency key on submit**
-
+**Get Submission by Resume Token:**
 ```json
 {
   "method": "tools/call",
   "params": {
-    "name": "formbridge_vendor_onboarding_submit",
+    "name": "formbridge_vendor_onboarding_status",
     "arguments": {
-      "submissionId": "sub_mcp_456",
-      "resumeToken": "rtok_003",
-      "actor": {
-        "kind": "agent",
-        "id": "onboarding_agent"
-      }
+      "resumeToken": "rtok_v2_b2c3d4e5"
     }
   }
 }
 ```
 
-**Response (error - idempotency key required):**
+**Response:**
 ```json
 {
   "content": [
     {
       "type": "text",
-      "text": "{\"ok\":false,\"submissionId\":\"sub_mcp_456\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_003\",\"error\":{\"type\":\"invalid\",\"message\":\"idempotencyKey is required for submit operation\",\"retryable\":true,\"nextActions\":[{\"action\":\"collect_field\",\"field\":\"idempotencyKey\",\"hint\":\"Generate a unique idempotency key to safely retry this submission. Example: 'submit_{submissionId}_{uuid}'.\"}]}}"
+      "text": "{\"ok\":true,\"submissionId\":\"sub_abc123\",\"intakeId\":\"intake_vendor_onboarding\",\"state\":\"in_progress\",\"resumeToken\":\"rtok_v2_b2c3d4e5\",\"version\":2,\"tokenExpiresAt\":\"2026-01-30T10:00:00Z\",\"fields\":{\"legal_name\":\"Acme Corp\",\"country\":\"US\",\"tax_id\":\"12-3456789\"},\"schema\":{},\"missingFields\":[\"w9_document\"]}"
     }
-  ],
-  "isError": true
+  ]
 }
 ```
 
-#### Implementation Notes for MCP Servers
-
-1. **Tool Schema Generation:** The `idempotencyKey` parameter should be included in the tool schema for `_create` and `_submit` tools:
-   ```json
-   {
-     "name": "formbridge_vendor_onboarding_create",
-     "inputSchema": {
-       "type": "object",
-       "properties": {
-         "idempotencyKey": {
-           "type": "string",
-           "description": "Optional. Unique key to prevent duplicate submission creation. Retries with the same key return the existing submission."
-         },
-         "actor": { ... },
-         "initialFields": { ... }
-       }
-     }
-   }
-   ```
-
-2. **Metadata Propagation:** When replaying cached responses, MCP servers SHOULD include `_meta.idempotent_replayed: true` to signal to agents that this is not a new operation.
-
-3. **Error Handling:** Agents using MCP tools can detect conflicts and other idempotency errors by checking `error.type === "conflict"` in the parsed response.
-
-4. **Key Generation Guidance:** MCP tool descriptions SHOULD include examples of proper idempotency key generation to guide agents:
-   - Creation: `"idem_{workflow_id}_{timestamp}"` or `"idem_{uuid}"`
-   - Submission: `"submit_{submissionId}_{attempt}"` or `"submit_{workflow_id}"`
+**→ See also:** [RESUME_TOKENS_DESIGN.md §8](./RESUME_TOKENS_DESIGN.md#8-mcp-integration) for complete MCP integration specification including tool parameter bindings and error handling.
 
 ---
 

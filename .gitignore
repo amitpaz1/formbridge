@@ -48,6 +48,9 @@ Thumbs.db
 
 # Auto Claude
 .auto-claude/
-.auto-claude-status
 .auto-claude-security.json
+.auto-claude-status
 .claude_settings.json
+.worktrees/
+.security-key
+logs/security/
