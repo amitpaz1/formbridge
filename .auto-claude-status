@@ -3,7 +3,7 @@
   "spec": "010-mixed-mode-agent-human-collaboration",
   "state": "building",
   "subtasks": {
-    "completed": 3,
+    "completed": 5,
     "total": 19,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 5,
+    "number": 7,
     "started_at": "2026-01-29T23:13:26.149294"
   },
-  "last_update": "2026-01-29T23:28:01.786442"
+  "last_update": "2026-01-29T23:34:28.118616"
 }
