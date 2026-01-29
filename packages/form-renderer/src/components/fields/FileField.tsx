@@ -3,7 +3,7 @@
  * Supports file upload constraints (maxSize, allowedTypes, maxCount)
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { FileFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
@@ -53,6 +53,39 @@ function validateFile(
 }
 
 /**
+ * File upload progress state
+ */
+interface FileProgress {
+  /** File being uploaded */
+  file: File;
+  /** Upload progress percentage (0-100) */
+  progress: number;
+  /** Upload state */
+  state: 'pending' | 'uploading' | 'complete' | 'error';
+  /** Error message if state is 'error' */
+  error?: string;
+}
+
+/**
+ * File preview state
+ */
+interface FilePreview {
+  /** File reference */
+  file: File;
+  /** Preview URL (blob URL for images) */
+  url: string;
+  /** Whether file is an image */
+  isImage: boolean;
+}
+
+/**
+ * Checks if a file is an image type
+ */
+function isImageFile(file: File): boolean {
+  return file.type.startsWith('image/');
+}
+
+/**
  * FileField - Renders a file input field with drag-and-drop support
  *
  * Features:
@@ -61,8 +94,11 @@ function validateFile(
  * - File size and MIME type validation
  * - Multiple file support
  * - File list display with removal
+ * - Upload progress tracking with progress bars
+ * - Image preview thumbnails
  * - Full accessibility support
  * - Visual feedback for drag state
+ * - Automatic cleanup of preview URLs
  *
  * @example
  * ```tsx
@@ -101,6 +137,8 @@ export const FileField: React.FC<FileFieldProps> = ({
   const { label, description, required, hint } = metadata;
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Map<string, FileProgress>>(new Map());
+  const [filePreviews, setFilePreviews] = useState<Map<string, FilePreview>>(new Map());
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Get current files as array
@@ -109,6 +147,98 @@ export const FileField: React.FC<FileFieldProps> = ({
       ? value
       : [value]
     : [];
+
+  /**
+   * Generate a unique key for a file (name + size + lastModified)
+   */
+  const getFileKey = useCallback((file: File): string => {
+    return `${file.name}-${file.size}-${file.lastModified}`;
+  }, []);
+
+  /**
+   * Generate preview for a file if it's an image
+   */
+  const generatePreview = useCallback((file: File): FilePreview | null => {
+    if (!isImageFile(file)) {
+      return null;
+    }
+
+    const url = URL.createObjectURL(file);
+    return {
+      file,
+      url,
+      isImage: true,
+    };
+  }, []);
+
+  /**
+   * Update file previews when files change
+   */
+  useEffect(() => {
+    const newPreviews = new Map<string, FilePreview>();
+
+    // Generate previews for current files
+    currentFiles.forEach((file) => {
+      const key = getFileKey(file);
+      const existingPreview = filePreviews.get(key);
+
+      if (existingPreview) {
+        // Reuse existing preview
+        newPreviews.set(key, existingPreview);
+      } else {
+        // Generate new preview
+        const preview = generatePreview(file);
+        if (preview) {
+          newPreviews.set(key, preview);
+        }
+      }
+    });
+
+    // Clean up old preview URLs that are no longer needed
+    filePreviews.forEach((preview, key) => {
+      if (!newPreviews.has(key)) {
+        URL.revokeObjectURL(preview.url);
+      }
+    });
+
+    setFilePreviews(newPreviews);
+
+    // Cleanup function to revoke all preview URLs on unmount
+    return () => {
+      newPreviews.forEach((preview) => {
+        URL.revokeObjectURL(preview.url);
+      });
+    };
+  }, [currentFiles, getFileKey, generatePreview]);
+
+  /**
+   * Initialize upload progress for new files
+   */
+  useEffect(() => {
+    const newProgress = new Map<string, FileProgress>(uploadProgress);
+
+    // Add progress tracking for new files
+    currentFiles.forEach((file) => {
+      const key = getFileKey(file);
+      if (!newProgress.has(key)) {
+        newProgress.set(key, {
+          file,
+          progress: 100, // Files are considered complete when added (no actual upload yet)
+          state: 'complete',
+        });
+      }
+    });
+
+    // Remove progress for files that are no longer in the list
+    const currentKeys = new Set(currentFiles.map(getFileKey));
+    Array.from(newProgress.keys()).forEach((key) => {
+      if (!currentKeys.has(key)) {
+        newProgress.delete(key);
+      }
+    });
+
+    setUploadProgress(newProgress);
+  }, [currentFiles, getFileKey]);
 
   // Handle file selection (from input or drop)
   const handleFiles = (files: FileList | null) => {
@@ -324,45 +454,100 @@ export const FileField: React.FC<FileFieldProps> = ({
             role="list"
             aria-label="Selected files"
           >
-            {currentFiles.map((file, index) => (
-              <li
-                key={`${file.name}-${index}`}
-                className="formbridge-file-field__file-item"
-                data-testid={`field-${path}-file-${index}`}
-              >
-                <div className="formbridge-file-field__file-info">
-                  <span className="formbridge-file-field__file-name">
-                    {file.name}
-                  </span>
-                  <span className="formbridge-file-field__file-size">
-                    {formatFileSize(file.size)}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveFile(index)}
-                  disabled={disabled}
-                  className="formbridge-file-field__remove-button"
-                  aria-label={`Remove ${file.name}`}
-                  data-testid={`field-${path}-remove-${index}`}
+            {currentFiles.map((file, index) => {
+              const fileKey = getFileKey(file);
+              const preview = filePreviews.get(fileKey);
+              const progress = uploadProgress.get(fileKey);
+
+              return (
+                <li
+                  key={`${file.name}-${index}`}
+                  className="formbridge-file-field__file-item"
+                  data-testid={`field-${path}-file-${index}`}
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    aria-hidden="true"
+                  {/* Preview thumbnail for images */}
+                  {preview && preview.isImage && (
+                    <div className="formbridge-file-field__file-preview">
+                      <img
+                        src={preview.url}
+                        alt={`Preview of ${file.name}`}
+                        className="formbridge-file-field__preview-image"
+                        data-testid={`field-${path}-preview-${index}`}
+                      />
+                    </div>
+                  )}
+
+                  <div className="formbridge-file-field__file-content">
+                    <div className="formbridge-file-field__file-info">
+                      <span className="formbridge-file-field__file-name">
+                        {file.name}
+                      </span>
+                      <span className="formbridge-file-field__file-size">
+                        {formatFileSize(file.size)}
+                      </span>
+                    </div>
+
+                    {/* Progress bar */}
+                    {progress && progress.state !== 'complete' && (
+                      <div className="formbridge-file-field__progress-container">
+                        <div
+                          className={`formbridge-file-field__progress-bar ${
+                            progress.state === 'error'
+                              ? 'formbridge-file-field__progress-bar--error'
+                              : ''
+                          }`}
+                          role="progressbar"
+                          aria-valuenow={progress.progress}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-label={`Upload progress for ${file.name}`}
+                          data-testid={`field-${path}-progress-${index}`}
+                        >
+                          <div
+                            className="formbridge-file-field__progress-fill"
+                            style={{ width: `${progress.progress}%` }}
+                          />
+                        </div>
+                        {progress.state === 'uploading' && (
+                          <span className="formbridge-file-field__progress-text">
+                            {progress.progress}%
+                          </span>
+                        )}
+                        {progress.state === 'error' && progress.error && (
+                          <span className="formbridge-file-field__progress-error">
+                            {progress.error}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveFile(index)}
+                    disabled={disabled}
+                    className="formbridge-file-field__remove-button"
+                    aria-label={`Remove ${file.name}`}
+                    data-testid={`field-${path}-remove-${index}`}
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </li>
-            ))}
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
