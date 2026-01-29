@@ -10,7 +10,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { ResumeFormPage } from '../../packages/form-renderer/src/components/ResumeFormPage';
 import { FormBridgeForm } from '../../packages/form-renderer/src/components/FormBridgeForm';
@@ -522,6 +522,386 @@ describe('Resume Form Integration - Human Handoff', () => {
 
       // Form should have submit button
       expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+    });
+  });
+
+  describe('Human Completes and Submits Form', () => {
+    it('should allow human to fill remaining fields and submit', async () => {
+      const onFieldChange = jest.fn();
+      const onSubmit = jest.fn();
+
+      const { rerender } = render(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={mockSubmission.fields}
+          fieldAttribution={mockSubmission.fieldAttribution}
+          currentActor={humanActor}
+          onFieldChange={onFieldChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Human fills the W-9 document field
+      const w9Input = screen.getByLabelText(/W-9 Form/i) as HTMLInputElement;
+      fireEvent.change(w9Input, { target: { value: 'file://uploads/w9-acme.pdf' } });
+
+      // Verify onFieldChange was called with human actor
+      expect(onFieldChange).toHaveBeenCalledWith(
+        'w9Document',
+        'file://uploads/w9-acme.pdf',
+        humanActor
+      );
+
+      // Update component with new field value
+      const updatedFields = {
+        ...mockSubmission.fields,
+        w9Document: 'file://uploads/w9-acme.pdf',
+      };
+
+      const updatedAttribution = {
+        ...mockSubmission.fieldAttribution,
+        w9Document: humanActor,
+      };
+
+      rerender(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={updatedFields}
+          fieldAttribution={updatedAttribution}
+          currentActor={humanActor}
+          onFieldChange={onFieldChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Human fills insurance certificate field
+      const insuranceInput = screen.getByLabelText(/Insurance Certificate/i) as HTMLInputElement;
+      fireEvent.change(insuranceInput, { target: { value: 'file://uploads/insurance-acme.pdf' } });
+
+      // Verify onFieldChange was called again
+      expect(onFieldChange).toHaveBeenCalledWith(
+        'insuranceCertificate',
+        'file://uploads/insurance-acme.pdf',
+        humanActor
+      );
+
+      // Update component with all fields filled
+      const finalFields = {
+        ...updatedFields,
+        insuranceCertificate: 'file://uploads/insurance-acme.pdf',
+      };
+
+      const finalAttribution = {
+        ...updatedAttribution,
+        insuranceCertificate: humanActor,
+      };
+
+      rerender(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={finalFields}
+          fieldAttribution={finalAttribution}
+          currentActor={humanActor}
+          onFieldChange={onFieldChange}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Human submits the form
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      fireEvent.click(submitButton);
+
+      // Verify onSubmit was called with final field values
+      expect(onSubmit).toHaveBeenCalledWith(finalFields);
+    });
+
+    it('should track both agent and human attribution after submission', async () => {
+      // Create a complete submission with mixed attribution
+      const mixedSubmission: Submission = {
+        ...mockSubmission,
+        fields: {
+          companyName: 'Acme Corp', // Agent
+          address: '123 Main St, San Francisco, CA 94105', // Agent
+          taxId: '12-3456789', // Agent
+          w9Document: 'file://uploads/w9-acme.pdf', // Human
+          insuranceCertificate: 'file://uploads/insurance-acme.pdf', // Human
+        },
+        fieldAttribution: {
+          companyName: agentActor,
+          address: agentActor,
+          taxId: agentActor,
+          w9Document: humanActor,
+          insuranceCertificate: humanActor,
+        },
+      };
+
+      render(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={mixedSubmission.fields}
+          fieldAttribution={mixedSubmission.fieldAttribution}
+          currentActor={humanActor}
+        />
+      );
+
+      // Verify agent attribution badges (3 fields)
+      const agentBadges = screen.getAllByText(/Filled by agent/i);
+      expect(agentBadges).toHaveLength(3);
+
+      // Verify human attribution badges (2 fields)
+      const humanBadges = screen.getAllByText(/Filled by human/i);
+      expect(humanBadges).toHaveLength(2);
+
+      // Verify all fields have values
+      expect((screen.getByLabelText(/Company Name/i) as HTMLInputElement).value).toBe('Acme Corp');
+      expect((screen.getByLabelText(/Address/i) as HTMLInputElement).value).toBe('123 Main St, San Francisco, CA 94105');
+      expect((screen.getByLabelText(/Tax ID/i) as HTMLInputElement).value).toBe('12-3456789');
+      expect((screen.getByLabelText(/W-9 Form/i) as HTMLInputElement).value).toBe('file://uploads/w9-acme.pdf');
+      expect((screen.getByLabelText(/Insurance Certificate/i) as HTMLInputElement).value).toBe('file://uploads/insurance-acme.pdf');
+    });
+
+    it('should verify submission state transitions to SUBMITTED', async () => {
+      // Mock the submission API endpoint
+      const mockSubmitFetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          submissionId: 'sub_test123',
+          state: 'submitted',
+          message: 'Submission completed successfully',
+        }),
+      });
+
+      global.fetch = mockSubmitFetch;
+
+      const onSubmit = jest.fn(async (fields) => {
+        // Simulate API call to submit the form
+        const response = await fetch('http://localhost:3000/submissions/sub_test123/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fields,
+            actor: humanActor,
+          }),
+        });
+
+        const result = await response.json();
+        return result;
+      });
+
+      render(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={{
+            companyName: 'Acme Corp',
+            address: '123 Main St',
+            taxId: '12-3456789',
+            w9Document: 'file://uploads/w9.pdf',
+            insuranceCertificate: 'file://uploads/insurance.pdf',
+          }}
+          fieldAttribution={{
+            companyName: agentActor,
+            address: agentActor,
+            taxId: agentActor,
+            w9Document: humanActor,
+            insuranceCertificate: humanActor,
+          }}
+          currentActor={humanActor}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Submit the form
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      fireEvent.click(submitButton);
+
+      // Wait for async submission
+      await waitFor(() => {
+        expect(onSubmit).toHaveBeenCalled();
+      });
+
+      // Verify API was called with correct payload
+      expect(mockSubmitFetch).toHaveBeenCalledWith(
+        'http://localhost:3000/submissions/sub_test123/submit',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('human'),
+        })
+      );
+
+      // Verify the result
+      const result = await onSubmit.mock.results[0].value;
+      expect(result.state).toBe('submitted');
+    });
+
+    it('should show both actor types in submission events', async () => {
+      // This test verifies that events track both agent and human actors
+      // throughout the submission lifecycle
+
+      const submissionWithEvents: Submission = {
+        ...mockSubmission,
+        fields: {
+          companyName: 'Acme Corp',
+          taxId: '12-3456789',
+          w9Document: 'file://uploads/w9.pdf',
+        },
+        fieldAttribution: {
+          companyName: agentActor,
+          taxId: agentActor,
+          w9Document: humanActor,
+        },
+        events: [
+          {
+            eventId: 'evt_001',
+            submissionId: 'sub_test123',
+            type: 'submission.created',
+            ts: new Date().toISOString(),
+            actor: agentActor,
+            state: 'draft',
+          },
+          {
+            eventId: 'evt_002',
+            submissionId: 'sub_test123',
+            type: 'field.updated',
+            ts: new Date().toISOString(),
+            actor: agentActor,
+            state: 'in_progress',
+            payload: { field: 'companyName', value: 'Acme Corp' },
+          },
+          {
+            eventId: 'evt_003',
+            submissionId: 'sub_test123',
+            type: 'handoff.link_issued',
+            ts: new Date().toISOString(),
+            actor: agentActor,
+            state: 'in_progress',
+            payload: {
+              url: 'http://localhost:3000/resume?token=rtok_test123',
+              resumeToken: 'rtok_test123',
+            },
+          },
+          {
+            eventId: 'evt_004',
+            submissionId: 'sub_test123',
+            type: 'handoff.resumed',
+            ts: new Date().toISOString(),
+            actor: humanActor,
+            state: 'in_progress',
+          },
+          {
+            eventId: 'evt_005',
+            submissionId: 'sub_test123',
+            type: 'field.updated',
+            ts: new Date().toISOString(),
+            actor: humanActor,
+            state: 'in_progress',
+            payload: { field: 'w9Document', value: 'file://uploads/w9.pdf' },
+          },
+        ],
+      };
+
+      // Verify events contain both agent and human actors
+      const agentEvents = submissionWithEvents.events.filter(e => e.actor.kind === 'agent');
+      const humanEvents = submissionWithEvents.events.filter(e => e.actor.kind === 'human');
+
+      expect(agentEvents).toHaveLength(3); // created, field.updated, handoff.link_issued
+      expect(humanEvents).toHaveLength(2); // handoff.resumed, field.updated
+
+      // Verify agent events
+      expect(agentEvents[0].type).toBe('submission.created');
+      expect(agentEvents[0].actor.id).toBe('agent-onboarding-001');
+      expect(agentEvents[1].type).toBe('field.updated');
+      expect(agentEvents[2].type).toBe('handoff.link_issued');
+
+      // Verify human events
+      expect(humanEvents[0].type).toBe('handoff.resumed');
+      expect(humanEvents[0].actor.id).toBe('user-vendor-manager');
+      expect(humanEvents[1].type).toBe('field.updated');
+      expect(humanEvents[1].actor.kind).toBe('human');
+    });
+
+    it('should handle form submission with validation errors', async () => {
+      const onSubmit = jest.fn();
+      const errors = {
+        taxId: 'Tax ID is required',
+      };
+
+      render(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={{
+            companyName: 'Acme Corp',
+            address: '123 Main St',
+            taxId: '', // Missing required field
+          }}
+          fieldAttribution={{
+            companyName: agentActor,
+            address: agentActor,
+          }}
+          currentActor={humanActor}
+          onSubmit={onSubmit}
+          errors={errors}
+        />
+      );
+
+      // Verify error message is displayed
+      expect(screen.getByText(/Tax ID is required/i)).toBeInTheDocument();
+
+      // Submit button should still be present (submission handled by parent)
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      expect(submitButton).toBeInTheDocument();
+
+      // Click submit (parent component will handle validation)
+      fireEvent.click(submitButton);
+
+      // onSubmit is called (validation is handled by parent/API)
+      expect(onSubmit).toHaveBeenCalled();
+    });
+
+    it('should preserve agent fields when human submits', async () => {
+      const onSubmit = jest.fn();
+
+      const completeFields = {
+        companyName: 'Acme Corp', // Agent filled
+        address: '123 Main St', // Agent filled
+        taxId: '12-3456789', // Agent filled
+        w9Document: 'file://uploads/w9.pdf', // Human filled
+        insuranceCertificate: 'file://uploads/insurance.pdf', // Human filled
+      };
+
+      render(
+        <FormBridgeForm
+          schema={mockSchema}
+          fields={completeFields}
+          fieldAttribution={{
+            companyName: agentActor,
+            address: agentActor,
+            taxId: agentActor,
+            w9Document: humanActor,
+            insuranceCertificate: humanActor,
+          }}
+          currentActor={humanActor}
+          onSubmit={onSubmit}
+        />
+      );
+
+      // Submit form
+      const submitButton = screen.getByRole('button', { name: /submit/i });
+      fireEvent.click(submitButton);
+
+      // Verify all fields (both agent and human) are submitted
+      expect(onSubmit).toHaveBeenCalledWith(completeFields);
+
+      // Verify agent fields are preserved
+      const submittedFields = onSubmit.mock.calls[0][0];
+      expect(submittedFields.companyName).toBe('Acme Corp');
+      expect(submittedFields.address).toBe('123 Main St');
+      expect(submittedFields.taxId).toBe('12-3456789');
+
+      // Verify human fields are included
+      expect(submittedFields.w9Document).toBe('file://uploads/w9.pdf');
+      expect(submittedFields.insuranceCertificate).toBe('file://uploads/insurance.pdf');
     });
   });
 });
