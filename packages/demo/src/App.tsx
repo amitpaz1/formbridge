@@ -3,7 +3,7 @@
  * Demonstrates agent-to-human handoff workflow with FormBridge
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import { ResumeFormPage } from '@formbridge/form-renderer';
 
@@ -11,6 +11,66 @@ import { ResumeFormPage } from '@formbridge/form-renderer';
  * Home page component - Demo landing page
  */
 const HomePage: React.FC = () => {
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [resumeUrl, setResumeUrl] = useState<string | null>(null);
+  const [simulationLog, setSimulationLog] = useState<string[]>([]);
+
+  /**
+   * Simulates agent workflow: create submission, fill fields, generate resume URL
+   */
+  const handleSimulateAgent = async () => {
+    setIsSimulating(true);
+    setResumeUrl(null);
+    setSimulationLog([]);
+
+    try {
+      // Step 1: Simulate agent creating submission
+      setSimulationLog((prev) => [...prev, '✓ Agent: Creating new submission...']);
+      await simulateDelay(500);
+      const submissionId = `sub_${Date.now()}`;
+      setSimulationLog((prev) => [...prev, `✓ Agent: Submission created: ${submissionId}`]);
+
+      // Step 2: Simulate agent filling fields
+      await simulateDelay(500);
+      setSimulationLog((prev) => [
+        ...prev,
+        '✓ Agent: Filling known fields (name, address, tax ID)...',
+      ]);
+      await simulateDelay(500);
+      setSimulationLog((prev) => [
+        ...prev,
+        '  - Set field "companyName" = "Acme Corp"',
+        '  - Set field "address" = "123 Main St, San Francisco, CA"',
+        '  - Set field "taxId" = "12-3456789"',
+      ]);
+
+      // Step 3: Simulate generating resume URL
+      await simulateDelay(500);
+      setSimulationLog((prev) => [...prev, '✓ Agent: Generating handoff URL...']);
+      await simulateDelay(500);
+      const resumeToken = `rtok_${Date.now()}`;
+      const generatedUrl = `${window.location.origin}/resume?token=${resumeToken}`;
+      setResumeUrl(generatedUrl);
+      setSimulationLog((prev) => [
+        ...prev,
+        '✓ Agent: Resume URL generated successfully!',
+        '✓ Agent: Handoff complete. Ready for human to complete form.',
+      ]);
+    } catch (error) {
+      setSimulationLog((prev) => [
+        ...prev,
+        `✗ Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      ]);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  /**
+   * Helper function to simulate async delays
+   */
+  const simulateDelay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
   return (
     <div className="demo-home">
       <header className="demo-header">
@@ -25,6 +85,45 @@ const HomePage: React.FC = () => {
             This demo showcases how an AI agent can start a form submission, fill the fields it knows,
             and generate a shareable resume URL for a human to complete the remaining fields.
           </p>
+        </section>
+
+        <section className="demo-section demo-simulation">
+          <h3>Try It Out</h3>
+          <p>Click the button below to simulate an agent starting a form submission:</p>
+          <button
+            className="demo-button demo-button-primary"
+            onClick={handleSimulateAgent}
+            disabled={isSimulating}
+            aria-label="Simulate agent workflow"
+          >
+            {isSimulating ? 'Simulating Agent...' : '🤖 Simulate Agent'}
+          </button>
+
+          {simulationLog.length > 0 && (
+            <div className="demo-simulation-log" role="log" aria-live="polite">
+              <h4>Simulation Log:</h4>
+              <pre className="demo-log-output">
+                {simulationLog.map((log, index) => (
+                  <div key={index}>{log}</div>
+                ))}
+              </pre>
+            </div>
+          )}
+
+          {resumeUrl && (
+            <div className="demo-resume-url" role="alert" aria-live="polite">
+              <h4>Resume URL Generated:</h4>
+              <p className="demo-url-description">
+                Share this URL with a human to complete the form:
+              </p>
+              <div className="demo-url-box">
+                <code className="demo-url-code">{resumeUrl}</code>
+                <Link to={resumeUrl.replace(window.location.origin, '')} className="demo-button">
+                  Open Resume Form →
+                </Link>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="demo-section">
