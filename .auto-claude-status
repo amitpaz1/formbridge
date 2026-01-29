@@ -3,23 +3,23 @@
   "spec": "010-mixed-mode-agent-human-collaboration",
   "state": "building",
   "subtasks": {
-    "completed": 5,
+    "completed": 8,
     "total": 19,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Resume URL Generation",
+    "current": "Resume Form Page",
     "id": null,
-    "total": 4
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 7,
+    "number": 10,
     "started_at": "2026-01-29T23:13:26.149294"
   },
-  "last_update": "2026-01-29T23:34:28.118616"
+  "last_update": "2026-01-29T23:44:48.130339"
 }
