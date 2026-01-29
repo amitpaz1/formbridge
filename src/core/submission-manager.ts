@@ -24,11 +24,16 @@ import type {
   SetFieldsOutput,
   GetSubmissionInput,
   GetSubmissionOutput,
-  IntakeError,
   FieldError,
   NextAction,
   IntakeEventType,
+  RequestUploadInput,
+  RequestUploadOutput,
+  ConfirmUploadInput,
+  ConfirmUploadOutput,
+  UploadStatus,
 } from '../types.js';
+import type { StorageBackend } from '../storage/storage-backend.js';
 
 /**
  * Configuration options for SubmissionManager
@@ -36,6 +41,8 @@ import type {
 export interface SubmissionManagerConfig {
   /** Default TTL for submissions in milliseconds (default: 7 days) */
   defaultTtlMs?: number;
+  /** Storage backend for file uploads (required for upload operations) */
+  storageBackend?: StorageBackend;
 }
 
 /**
@@ -52,12 +59,14 @@ export class SubmissionManager {
   private submissions: Map<string, Submission> = new Map();
   private events: Map<string, IntakeEvent[]> = new Map();
   private idempotencyKeys: Map<string, string> = new Map();
-  private readonly config: Required<SubmissionManagerConfig>;
+  private readonly config: Required<Omit<SubmissionManagerConfig, 'storageBackend'>>;
+  private readonly storageBackend?: StorageBackend;
 
   constructor(config: SubmissionManagerConfig = {}) {
     this.config = {
       defaultTtlMs: config.defaultTtlMs ?? 7 * 24 * 60 * 60 * 1000, // 7 days
     };
+    this.storageBackend = config.storageBackend;
   }
 
   /**
@@ -267,6 +276,207 @@ export class SubmissionManager {
       fields: submission.fields,
       metadata: submission.metadata,
       errors: errors.length > 0 ? errors : undefined,
+    };
+  }
+
+  /**
+   * Requests a signed upload URL for a file field.
+   * Implements §4.4 of the spec.
+   *
+   * @param input - RequestUpload operation input
+   * @param intakeDefinition - The intake definition for field validation
+   * @returns RequestUploadOutput or throws an error
+   */
+  async requestUpload(
+    input: RequestUploadInput,
+    intakeDefinition: IntakeDefinition
+  ): Promise<RequestUploadOutput> {
+    // Validate storage backend is configured
+    if (!this.storageBackend) {
+      throw new Error('Storage backend not configured');
+    }
+
+    // Get submission and validate resume token
+    const submission = this.getAndValidateSubmission(input.submissionId, input.resumeToken);
+
+    // TODO: Validate field exists in intakeDefinition.schema and is a file field
+    // For now, we trust the caller to provide valid field names
+    void intakeDefinition;
+
+    // Generate signed upload URL from storage backend
+    const signedUrl = await this.storageBackend.generateUploadUrl({
+      intakeId: submission.intakeId,
+      submissionId: submission.id,
+      fieldPath: input.field,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      constraints: {
+        maxSize: input.sizeBytes,
+        allowedTypes: [input.mimeType],
+        maxCount: 1,
+      },
+    });
+
+    // Store upload status in submission
+    const uploadStatus: UploadStatus = {
+      uploadId: signedUrl.uploadId,
+      field: input.field,
+      filename: input.filename,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      status: 'pending',
+    };
+
+    if (!submission.uploads) {
+      submission.uploads = {};
+    }
+    submission.uploads[signedUrl.uploadId] = uploadStatus;
+    submission.metadata.updatedAt = new Date().toISOString();
+
+    // Update state to awaiting_upload if currently in draft or in_progress
+    if (submission.state === 'draft' || submission.state === 'in_progress') {
+      submission.state = 'awaiting_upload';
+    }
+
+    // Generate new resume token
+    const newResumeToken = this.generateResumeToken();
+    submission.resumeToken = newResumeToken;
+
+    // Emit upload requested event
+    this.emitEvent({
+      eventId: this.generateEventId(),
+      type: 'upload.requested',
+      submissionId: submission.id,
+      ts: submission.metadata.updatedAt,
+      actor: input.actor,
+      state: submission.state,
+      payload: {
+        uploadId: signedUrl.uploadId,
+        field: input.field,
+        filename: input.filename,
+        sizeBytes: input.sizeBytes,
+      },
+    });
+
+    // Calculate expiration in milliseconds
+    const expiresInMs = new Date(signedUrl.expiresAt).getTime() - Date.now();
+
+    return {
+      ok: true,
+      uploadId: signedUrl.uploadId,
+      method: signedUrl.method,
+      url: signedUrl.url,
+      headers: signedUrl.headers,
+      expiresInMs,
+      constraints: {
+        accept: signedUrl.constraints.allowedTypes,
+        maxBytes: signedUrl.constraints.maxSize,
+      },
+    };
+  }
+
+  /**
+   * Confirms that a file upload has been completed.
+   * Implements §4.5 of the spec.
+   *
+   * @param input - ConfirmUpload operation input
+   * @returns ConfirmUploadOutput or throws an error
+   */
+  async confirmUpload(
+    input: ConfirmUploadInput
+  ): Promise<ConfirmUploadOutput> {
+    // Validate storage backend is configured
+    if (!this.storageBackend) {
+      throw new Error('Storage backend not configured');
+    }
+
+    // Get submission and validate resume token
+    const submission = this.getAndValidateSubmission(input.submissionId, input.resumeToken);
+
+    // Find upload in submission
+    const uploadStatus = submission.uploads?.[input.uploadId];
+    if (!uploadStatus) {
+      throw new Error(`Upload not found: ${input.uploadId}`);
+    }
+
+    // Verify upload with storage backend
+    const verificationResult = await this.storageBackend.verifyUpload(input.uploadId);
+
+    // Map storage backend status to submission upload status
+    // Note: storage backend 'expired' status is mapped to 'failed'
+    let mappedStatus: 'pending' | 'completed' | 'failed';
+    if (verificationResult.status === 'expired') {
+      mappedStatus = 'failed';
+    } else {
+      mappedStatus = verificationResult.status;
+    }
+
+    // Update upload status based on verification
+    uploadStatus.status = mappedStatus;
+    if (verificationResult.file) {
+      uploadStatus.uploadedAt = verificationResult.file.uploadedAt;
+      uploadStatus.url = verificationResult.file.storageKey;
+    }
+    submission.metadata.updatedAt = new Date().toISOString();
+
+    // Generate new resume token
+    const newResumeToken = this.generateResumeToken();
+    submission.resumeToken = newResumeToken;
+
+    // Update submission state based on upload result
+    if (mappedStatus === 'completed') {
+      // Check if there are any remaining pending uploads
+      const hasPendingUploads = Object.values(submission.uploads || {}).some(
+        u => u.status === 'pending'
+      );
+
+      // If no more pending uploads, transition back to in_progress
+      if (!hasPendingUploads && submission.state === 'awaiting_upload') {
+        submission.state = 'in_progress';
+      }
+
+      // Emit upload completed event
+      this.emitEvent({
+        eventId: this.generateEventId(),
+        type: 'upload.completed',
+        submissionId: submission.id,
+        ts: submission.metadata.updatedAt,
+        actor: input.actor,
+        state: submission.state,
+        payload: {
+          uploadId: input.uploadId,
+          field: uploadStatus.field,
+          filename: uploadStatus.filename,
+          sizeBytes: uploadStatus.sizeBytes,
+        },
+      });
+    } else {
+      // Emit upload failed event
+      this.emitEvent({
+        eventId: this.generateEventId(),
+        type: 'upload.failed',
+        submissionId: submission.id,
+        ts: submission.metadata.updatedAt,
+        actor: input.actor,
+        state: submission.state,
+        payload: {
+          uploadId: input.uploadId,
+          field: uploadStatus.field,
+          error: verificationResult.error,
+        },
+      });
+
+      throw new Error(
+        `Upload verification failed: ${verificationResult.error ?? 'Unknown error'}`
+      );
+    }
+
+    return {
+      ok: true,
+      submissionId: submission.id,
+      state: submission.state,
+      resumeToken: newResumeToken,
+      field: uploadStatus.field,
     };
   }
 
