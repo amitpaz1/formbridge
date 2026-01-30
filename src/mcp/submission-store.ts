@@ -1,12 +1,15 @@
 /**
- * Submission State Management
+ * Submission store implementations
  *
- * This module implements in-memory submission state tracking with
- * resumeToken-based access and idempotency key support.
+ * Contains two store implementations:
+ * 1. InMemorySubmissionStore - Used by SubmissionManager for field attribution tracking
+ * 2. SubmissionStore - Used by FormBridgeMCPServer for MCP session management
  */
 
 import { randomBytes } from 'crypto';
-import { SubmissionState, type Actor } from '../types/intake-contract.js';
+import type { Submission, SubmissionEntry } from "../types";
+import type { SubmissionStore as ISubmissionStore } from "../core/submission-manager";
+import { SubmissionState } from "../types/intake-contract.js";
 
 /**
  * Upload metadata for a submission
@@ -34,10 +37,77 @@ export interface UploadEntry {
   error?: string;
 }
 
+// =============================================================================
+// § InMemorySubmissionStore - for SubmissionManager (main branch architecture)
+// =============================================================================
+
 /**
- * Submission state entry stored in memory
+ * In-memory implementation of SubmissionStore interface
+ * Used by SubmissionManager for field attribution tracking
  */
-export interface SubmissionEntry {
+export class InMemorySubmissionStore implements ISubmissionStore {
+  private submissions: Map<string, SubmissionEntry> = new Map();
+  private resumeTokenIndex: Map<string, string> = new Map();
+
+  /**
+   * Get submission by ID
+   */
+  async get(submissionId: string): Promise<Submission | null> {
+    const entry = this.submissions.get(submissionId);
+    return entry ? entry.submission : null;
+  }
+
+  /**
+   * Save submission
+   * Stores submission with field attribution for audit trail
+   */
+  async save(submission: Submission): Promise<void> {
+    const entry: SubmissionEntry = {
+      submission,
+      resumeToken: submission.resumeToken,
+    };
+
+    this.submissions.set(submission.id, entry);
+    this.resumeTokenIndex.set(submission.resumeToken, submission.id);
+  }
+
+  /**
+   * Get submission by resume token
+   */
+  async getByResumeToken(resumeToken: string): Promise<Submission | null> {
+    const submissionId = this.resumeTokenIndex.get(resumeToken);
+    if (!submissionId) {
+      return null;
+    }
+
+    const entry = this.submissions.get(submissionId);
+    return entry ? entry.submission : null;
+  }
+
+  /**
+   * Clear all submissions (useful for testing)
+   */
+  clear(): void {
+    this.submissions.clear();
+    this.resumeTokenIndex.clear();
+  }
+
+  /**
+   * Get all submissions (useful for debugging)
+   */
+  getAll(): SubmissionEntry[] {
+    return Array.from(this.submissions.values());
+  }
+}
+
+// =============================================================================
+// § SubmissionStore - for FormBridgeMCPServer (MCP session management)
+// =============================================================================
+
+/**
+ * MCP submission entry stored in memory
+ */
+export interface MCPSubmissionEntry {
   /** Unique submission identifier */
   submissionId: string;
   /** Resume token for this submission */
@@ -54,20 +124,18 @@ export interface SubmissionEntry {
   createdAt: Date;
   /** Last update timestamp */
   updatedAt: Date;
-  /** Actor who created the submission */
-  actor?: Actor;
   /** File uploads for this submission */
   uploads?: Record<string, UploadEntry>;
 }
 
 /**
- * In-memory submission store
+ * In-memory submission store for FormBridgeMCPServer
  *
  * Tracks active submission sessions with resumeToken-based access.
  * In production, this should be replaced with a persistent store.
  */
 export class SubmissionStore {
-  private submissions = new Map<string, SubmissionEntry>();
+  private submissions = new Map<string, MCPSubmissionEntry>();
   private idempotencyKeys = new Map<string, string>(); // idempotencyKey -> resumeToken
 
   /**
@@ -76,13 +144,12 @@ export class SubmissionStore {
   create(
     intakeId: string,
     data: Record<string, unknown> = {},
-    idempotencyKey?: string,
-    actor?: Actor
-  ): SubmissionEntry {
-    const submissionId = this.generateId();
-    const resumeToken = this.generateToken();
+    idempotencyKey?: string
+  ): MCPSubmissionEntry {
+    const submissionId = `sub_${Date.now()}_${randomBytes(8).toString('hex')}`;
+    const resumeToken = `tok_${randomBytes(16).toString('hex')}`;
 
-    const entry: SubmissionEntry = {
+    const entry: MCPSubmissionEntry = {
       submissionId,
       resumeToken,
       intakeId,
@@ -91,7 +158,6 @@ export class SubmissionStore {
       idempotencyKey,
       createdAt: new Date(),
       updatedAt: new Date(),
-      actor
     };
 
     this.submissions.set(resumeToken, entry);
@@ -106,14 +172,14 @@ export class SubmissionStore {
   /**
    * Gets a submission by resume token
    */
-  get(resumeToken: string): SubmissionEntry | undefined {
+  get(resumeToken: string): MCPSubmissionEntry | undefined {
     return this.submissions.get(resumeToken);
   }
 
   /**
    * Gets a submission by idempotency key
    */
-  getByIdempotencyKey(idempotencyKey: string): SubmissionEntry | undefined {
+  getByIdempotencyKey(idempotencyKey: string): MCPSubmissionEntry | undefined {
     const resumeToken = this.idempotencyKeys.get(idempotencyKey);
     return resumeToken ? this.submissions.get(resumeToken) : undefined;
   }
@@ -121,7 +187,7 @@ export class SubmissionStore {
   /**
    * Updates a submission entry
    */
-  update(resumeToken: string, updates: Partial<SubmissionEntry>): SubmissionEntry | undefined {
+  update(resumeToken: string, updates: Partial<MCPSubmissionEntry>): MCPSubmissionEntry | undefined {
     const entry = this.submissions.get(resumeToken);
     if (!entry) {
       return undefined;
@@ -146,19 +212,5 @@ export class SubmissionStore {
       this.idempotencyKeys.delete(entry.idempotencyKey);
     }
     return this.submissions.delete(resumeToken);
-  }
-
-  /**
-   * Generates a unique submission ID
-   */
-  private generateId(): string {
-    return `sub_${Date.now()}_${randomBytes(8).toString('hex')}`;
-  }
-
-  /**
-   * Generates a secure resume token
-   */
-  private generateToken(): string {
-    return `tok_${randomBytes(16).toString('hex')}`;
   }
 }
