@@ -3,7 +3,7 @@
  * Handles communication with the backend API including event emission
  */
 
-import type { Actor } from '../../../src/types/intake-contract';
+import type { Actor } from '../types';
 
 /**
  * Event emission response
@@ -123,28 +123,24 @@ export class FormBridgeApiClient {
    * @returns Submission data or null if not found
    */
   async getSubmissionByResumeToken(resumeToken: string): Promise<any> {
-    try {
-      const url = `${this.endpoint}/submissions/resume/${encodeURIComponent(resumeToken)}`;
+    const url = `${this.endpoint}/submissions/resume/${encodeURIComponent(resumeToken)}`;
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: this.headers,
-      });
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.headers,
+    });
 
-      if (!response.ok) {
-        if (response.status === 404) {
-          throw new Error('Submission not found. The resume link may be invalid or expired.');
-        }
-        if (response.status === 403) {
-          throw new Error('Access denied. This resume link may have already been used.');
-        }
-        throw new Error(`Failed to fetch submission: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('Submission not found. The resume link may be invalid or expired.');
       }
-
-      return await response.json();
-    } catch (error) {
-      throw error;
+      if (response.status === 403) {
+        throw new Error('Access denied. This resume link may have already been used.');
+      }
+      throw new Error(`Failed to fetch submission: ${response.status} ${response.statusText}`);
     }
+
+    return await response.json();
   }
 }
 

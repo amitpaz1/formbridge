@@ -3,10 +3,9 @@
  * Displays which actor (agent, human, system) filled each field
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { FieldWrapper } from './FieldWrapper';
-import type { Actor } from '../../../../src/types/intake-contract';
-import type { FieldAttribution } from '../../../../src/types';
+import type { Actor, FieldAttribution } from '../types';
 
 /**
  * JSON Schema property definition
@@ -103,6 +102,11 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
   errors = {},
 }) => {
   const [localFields, setLocalFields] = useState<Record<string, unknown>>(fields);
+
+  // Sync local state when the fields prop changes (e.g., after refetch)
+  useEffect(() => {
+    setLocalFields(fields);
+  }, [fields]);
 
   /**
    * Handle field value change

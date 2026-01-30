@@ -5,7 +5,6 @@
 
 import type {
   Actor,
-  SubmissionState,
   IntakeEvent,
   CreateSubmissionRequest,
   CreateSubmissionResponse,
@@ -15,6 +14,27 @@ import type {
 } from "../types/intake-contract";
 import type { Submission, FieldAttribution } from "../types";
 import { randomUUID } from "crypto";
+
+export class SubmissionNotFoundError extends Error {
+  constructor(identifier: string) {
+    super(`Submission not found: ${identifier}`);
+    this.name = "SubmissionNotFoundError";
+  }
+}
+
+export class SubmissionExpiredError extends Error {
+  constructor(message = "This resume link has expired") {
+    super(message);
+    this.name = "SubmissionExpiredError";
+  }
+}
+
+export class InvalidResumeTokenError extends Error {
+  constructor() {
+    super("Invalid resume token");
+    this.name = "InvalidResumeTokenError";
+  }
+}
 
 export interface SubmissionStore {
   get(submissionId: string): Promise<Submission | null>;
@@ -125,12 +145,31 @@ export class SubmissionManager {
     }
 
     if (!submission) {
-      throw new Error(`Submission not found: ${request.submissionId}`);
+      throw new SubmissionNotFoundError(request.submissionId);
+    }
+
+    // Check if submission is in a terminal state
+    if (
+      ["submitted", "finalized", "cancelled", "expired"].includes(
+        submission.state
+      )
+    ) {
+      return {
+        ok: false,
+        submissionId: submission.id,
+        state: submission.state,
+        resumeToken: submission.resumeToken,
+        error: {
+          type: "conflict",
+          message: "Cannot modify fields in current state",
+          retryable: false,
+        },
+      } as IntakeError;
     }
 
     // Verify resume token matches
     if (submission.resumeToken !== request.resumeToken) {
-      throw new Error("Invalid resume token");
+      throw new InvalidResumeTokenError();
     }
 
     // Check if submission is expired
@@ -210,12 +249,12 @@ export class SubmissionManager {
     const submission = await this.store.get(request.submissionId);
 
     if (!submission) {
-      throw new Error(`Submission not found: ${request.submissionId}`);
+      throw new SubmissionNotFoundError(request.submissionId);
     }
 
     // Verify resume token
     if (submission.resumeToken !== request.resumeToken) {
-      throw new Error("Invalid resume token");
+      throw new InvalidResumeTokenError();
     }
 
     // Check if already submitted
@@ -263,7 +302,7 @@ export class SubmissionManager {
     return {
       ok: true,
       submissionId: submission.id,
-      state: "in_progress",
+      state: submission.state as "draft" | "in_progress" | "submitted",
       resumeToken: submission.resumeToken,
       schema: {},
       missingFields: [],
@@ -297,7 +336,7 @@ export class SubmissionManager {
     const submission = await this.store.get(submissionId);
 
     if (!submission) {
-      throw new Error(`Submission not found: ${submissionId}`);
+      throw new SubmissionNotFoundError(submissionId);
     }
 
     // Generate the resume URL with the token
@@ -337,12 +376,12 @@ export class SubmissionManager {
     const submission = await this.store.getByResumeToken(resumeToken);
 
     if (!submission) {
-      throw new Error(`Submission not found for resume token: ${resumeToken}`);
+      throw new SubmissionNotFoundError(resumeToken);
     }
 
     // Check if submission is expired
     if (submission.expiresAt && new Date(submission.expiresAt) < new Date()) {
-      throw new Error("This resume link has expired");
+      throw new SubmissionExpiredError();
     }
 
     const now = new Date().toISOString();

@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import type { Actor } from '../../../../src/types/intake-contract';
+import type { Actor } from '../types';
 
 /**
  * Props for FieldWrapper component

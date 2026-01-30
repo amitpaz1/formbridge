@@ -5,7 +5,7 @@
  * It fetches pre-filled form data and field attribution from the backend API.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { createApiClient } from '../api/client';
 
 /**
@@ -110,6 +110,12 @@ export function useResumeSubmission(
   const [error, setError] = useState<Error | null>(null);
   const [refetchCounter, setRefetchCounter] = useState(0);
 
+  // Use refs to hold latest callback values to avoid infinite re-render loops
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+
   const refetch = () => {
     setRefetchCounter(prev => prev + 1);
   };
@@ -125,7 +131,7 @@ export function useResumeSubmission(
       const err = new Error('Resume token is required');
       setError(err);
       setLoading(false);
-      onError?.(err);
+      onErrorRef.current?.(err);
       return;
     }
 
@@ -162,7 +168,7 @@ export function useResumeSubmission(
 
         // Emit HANDOFF_RESUMED event to notify agent
         try {
-          const client = createApiClient({ baseUrl: endpoint });
+          const client = createApiClient({ endpoint });
           await client.emitHandoffResumed(resumeToken, {
             kind: 'human',
             id: 'human-web',
@@ -173,7 +179,7 @@ export function useResumeSubmission(
           console.warn('Failed to emit HANDOFF_RESUMED event:', eventError);
         }
 
-        onLoad?.(data);
+        onLoadRef.current?.(data);
       } catch (err) {
         // Ignore abort errors
         if (err instanceof Error && err.name === 'AbortError') {
@@ -186,7 +192,7 @@ export function useResumeSubmission(
 
         setError(error);
         setLoading(false);
-        onError?.(error);
+        onErrorRef.current?.(error);
       }
     };
 
@@ -196,7 +202,7 @@ export function useResumeSubmission(
     return () => {
       abortController.abort();
     };
-  }, [resumeToken, endpoint, refetchCounter, onLoad, onError]);
+  }, [resumeToken, endpoint, refetchCounter]);
 
   return {
     submission,

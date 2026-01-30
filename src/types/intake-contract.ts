@@ -186,7 +186,7 @@ export interface CreateSubmissionRequest {
 export interface CreateSubmissionResponse {
   ok: true;
   submissionId: string;
-  state: "draft" | "in_progress";
+  state: "draft" | "in_progress" | "submitted";
   resumeToken: string;
   schema: unknown;
   missingFields?: string[];

@@ -3,7 +3,7 @@
  */
 
 import { FormBridgeApiClient, createApiClient, defaultApiClient } from '../client';
-import type { Actor } from '../../../../src/types/intake-contract';
+import type { Actor } from '../../types';
 
 // Mock fetch globally
 const mockFetch = jest.fn();

@@ -7,8 +7,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { FormBridgeForm } from '../FormBridgeForm';
 import type { FormBridgeFormProps, FormSchema } from '../FormBridgeForm';
-import type { Actor } from '../../../../../src/types/intake-contract';
-import type { FieldAttribution } from '../../../../../src/types';
+import type { Actor, FieldAttribution } from '../../types';
 
 describe('FormBridgeForm', () => {
   // Test data

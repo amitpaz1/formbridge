@@ -5,7 +5,33 @@
 
 import type { Request, Response, NextFunction } from "express";
 import type { SubmissionManager } from "../core/submission-manager";
+import {
+  SubmissionNotFoundError,
+  SubmissionExpiredError,
+} from "../core/submission-manager";
 import type { Actor } from "../types/intake-contract";
+import { z } from "zod";
+
+const actorSchema = z
+  .object({
+    kind: z.enum(["agent", "human", "system"]),
+    id: z.string().max(255),
+    name: z.string().max(255).optional(),
+  })
+  .strict();
+
+function parseActor(
+  body: unknown,
+  fallback: Actor
+): { ok: true; actor: Actor } | { ok: false; error: string } {
+  const raw = (body as Record<string, unknown>)?.actor;
+  if (!raw) return { ok: true, actor: fallback };
+  const result = actorSchema.safeParse(raw);
+  if (!result.success) {
+    return { ok: false, error: result.error.issues[0].message };
+  }
+  return { ok: true, actor: result.data as Actor };
+}
 
 /**
  * Create submission routes
@@ -39,41 +65,34 @@ export function createSubmissionRoutes(manager: SubmissionManager) {
           return;
         }
 
-        // Extract actor from request body or use system actor as default
-        const actor: Actor = req.body?.actor || {
+        // Validate and extract actor from request body
+        const actorResult = parseActor(req.body, {
           kind: "system",
           id: "system",
           name: "System",
-        };
-
-        // Generate the handoff URL
-        const resumeUrl = await manager.generateHandoffUrl(submissionId, actor);
-
-        // Get the submission to include additional details
-        const submission = await manager.getSubmission(submissionId);
-
-        if (!submission) {
-          res.status(404).json({
-            error: "Submission not found",
-          });
+        });
+        if (!actorResult.ok) {
+          res.status(400).json({ error: `Invalid actor: ${actorResult.error}` });
           return;
         }
+        const actor = actorResult.actor;
+
+        // Generate the handoff URL (throws SubmissionNotFoundError if not found)
+        const resumeUrl = await manager.generateHandoffUrl(submissionId, actor);
+
+        // Parse the resume token from the generated URL
+        const resumeTokenMatch = new URL(resumeUrl).searchParams.get("token");
 
         res.status(200).json({
           resumeUrl,
-          submissionId: submission.id,
-          resumeToken: submission.resumeToken,
+          submissionId,
+          resumeToken: resumeTokenMatch,
         });
       } catch (error) {
-        // Handle submission not found errors
-        if (error instanceof Error && error.message.includes("not found")) {
-          res.status(404).json({
-            error: error.message,
-          });
+        if (error instanceof SubmissionNotFoundError) {
+          res.status(404).json({ error: error.message });
           return;
         }
-
-        // Pass other errors to error handler
         next(error);
       }
     },
@@ -113,8 +132,14 @@ export function createSubmissionRoutes(manager: SubmissionManager) {
           return;
         }
 
-        // Return submission with fields and field attribution
-        res.status(200).json(submission);
+        // Return only the fields needed by the frontend (avoid leaking internal data)
+        res.status(200).json({
+          id: submission.id,
+          state: submission.state,
+          fields: submission.fields,
+          fieldAttribution: submission.fieldAttribution,
+          expiresAt: submission.expiresAt,
+        });
       } catch (error) {
         next(error);
       }
@@ -137,12 +162,17 @@ export function createSubmissionRoutes(manager: SubmissionManager) {
           return;
         }
 
-        // Extract actor from request body or use default human actor
-        const actor: Actor = req.body?.actor || {
+        // Validate and extract actor from request body
+        const actorResult = parseActor(req.body, {
           kind: "human",
           id: "human-unknown",
           name: "Human User",
-        };
+        });
+        if (!actorResult.ok) {
+          res.status(400).json({ error: `Invalid actor: ${actorResult.error}` });
+          return;
+        }
+        const actor = actorResult.actor;
 
         // Emit handoff.resumed event via manager
         const eventId = await manager.emitHandoffResumed(resumeToken, actor);
@@ -152,23 +182,14 @@ export function createSubmissionRoutes(manager: SubmissionManager) {
           eventId,
         });
       } catch (error) {
-        // Handle submission not found or expired errors
-        if (error instanceof Error) {
-          if (error.message.includes("not found")) {
-            res.status(404).json({
-              error: error.message,
-            });
-            return;
-          }
-          if (error.message.includes("expired")) {
-            res.status(403).json({
-              error: error.message,
-            });
-            return;
-          }
+        if (error instanceof SubmissionNotFoundError) {
+          res.status(404).json({ error: error.message });
+          return;
         }
-
-        // Pass other errors to error handler
+        if (error instanceof SubmissionExpiredError) {
+          res.status(403).json({ error: error.message });
+          return;
+        }
         next(error);
       }
     },

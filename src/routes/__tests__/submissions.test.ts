@@ -3,9 +3,13 @@
  * Verify HTTP endpoint handlers for submission operations
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createSubmissionRoutes } from "../submissions";
 import type { SubmissionManager } from "../../core/submission-manager";
+import {
+  SubmissionNotFoundError,
+  SubmissionExpiredError,
+} from "../../core/submission-manager";
 import type { Submission } from "../../types";
 
 describe("Submission Routes", () => {
@@ -123,8 +127,7 @@ describe("Submission Routes", () => {
 
     it("should return 404 when submission not found", async () => {
       const mockManager = {
-        generateHandoffUrl: vi.fn().mockRejectedValue(new Error("Submission not found: sub_notfound")),
-        getSubmission: vi.fn().mockResolvedValue(null),
+        generateHandoffUrl: vi.fn().mockRejectedValue(new SubmissionNotFoundError("sub_notfound")),
       } as unknown as SubmissionManager;
 
       const routes = createSubmissionRoutes(mockManager);
@@ -242,7 +245,13 @@ describe("Submission Routes", () => {
 
       expect(mockManager.getSubmissionByResumeToken).toHaveBeenCalledWith("rtok_valid123");
       expect(mockRes.status).toHaveBeenCalledWith(200);
-      expect(mockRes.json).toHaveBeenCalledWith(mockSubmission);
+      expect(mockRes.json).toHaveBeenCalledWith({
+        id: mockSubmission.id,
+        state: mockSubmission.state,
+        fields: mockSubmission.fields,
+        fieldAttribution: mockSubmission.fieldAttribution,
+        expiresAt: mockSubmission.expiresAt,
+      });
     });
 
     it("should return 404 for invalid resume token", async () => {
@@ -378,7 +387,7 @@ describe("Submission Routes", () => {
     it("should return 404 for invalid resume token", async () => {
       const mockManager = {
         emitHandoffResumed: vi.fn().mockRejectedValue(
-          new Error("Submission not found for resume token: rtok_invalid")
+          new SubmissionNotFoundError("rtok_invalid")
         ),
       } as unknown as SubmissionManager;
 
@@ -400,14 +409,14 @@ describe("Submission Routes", () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(404);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: "Submission not found for resume token: rtok_invalid",
+        error: "Submission not found: rtok_invalid",
       });
     });
 
     it("should return 403 for expired submission", async () => {
       const mockManager = {
         emitHandoffResumed: vi.fn().mockRejectedValue(
-          new Error("This resume link has expired")
+          new SubmissionExpiredError()
         ),
       } as unknown as SubmissionManager;
 

@@ -5,7 +5,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { ActorBadge } from '../ActorBadge';
-import type { Actor } from '../../../../../src/types/intake-contract';
+import type { Actor } from '../../types';
 
 describe('ActorBadge', () => {
   const agentActor: Actor = {

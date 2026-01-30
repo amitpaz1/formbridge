@@ -380,7 +380,7 @@ describe("SubmissionManager", () => {
     it("should throw error for invalid resume token", async () => {
       await expect(
         manager.emitHandoffResumed("rtok_invalid", humanActor)
-      ).rejects.toThrow("Submission not found for resume token");
+      ).rejects.toThrow("Submission not found: rtok_invalid");
     });
 
     it("should throw error for expired submission", async () => {

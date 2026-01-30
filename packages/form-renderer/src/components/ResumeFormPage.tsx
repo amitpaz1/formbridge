@@ -3,7 +3,10 @@
  * Accepts resumeToken query param and loads pre-filled submission data
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useRef } from 'react';
+import { useResumeSubmission } from '../hooks/useResumeSubmission';
+import { FormBridgeForm } from './FormBridgeForm';
+import type { Submission } from '../hooks/useResumeSubmission';
 
 /**
  * Props for ResumeFormPage component
@@ -47,38 +50,35 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
   onError,
   className = '',
 }) => {
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
-
   // Extract resume token from URL query params if not provided via props
-  const resumeToken = resumeTokenProp || (() => {
+  const resolvedToken = resumeTokenProp || (() => {
     if (typeof window === 'undefined') {
-      return undefined;
+      return '';
     }
     const params = new URLSearchParams(window.location.search);
-    return params.get('token') || undefined;
+    return params.get('token') || '';
   })();
 
-  useEffect(() => {
-    // Validate resume token
-    if (!resumeToken) {
-      const err = new Error('Missing resume token. Please provide a valid resume URL.');
-      setError(err);
-      setLoading(false);
-      onError?.(err);
-      return;
-    }
+  // Use refs for callbacks to avoid infinite re-render loops
+  const onLoadRef = useRef(onLoad);
+  onLoadRef.current = onLoad;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
-    // TODO (subtask-3-2): Fetch submission data using useResumeSubmission hook
-    // For now, just simulate loading state
-    const timer = setTimeout(() => {
-      setLoading(false);
-      // Simulate successful load
-      onLoad?.('sub_placeholder', resumeToken);
-    }, 100);
+  const handleLoad = React.useCallback((submission: Submission) => {
+    onLoadRef.current?.(submission.id, submission.resumeToken);
+  }, []);
 
-    return () => clearTimeout(timer);
-  }, [resumeToken, endpoint, onLoad, onError]);
+  const handleError = React.useCallback((error: Error) => {
+    onErrorRef.current?.(error);
+  }, []);
+
+  const { submission, loading, error } = useResumeSubmission({
+    resumeToken: resolvedToken,
+    endpoint,
+    onLoad: handleLoad,
+    onError: handleError,
+  });
 
   // Error state
   if (error) {
@@ -103,19 +103,28 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
     );
   }
 
-  // Success state - render form
-  // TODO (subtask-3-2): Replace with actual FormBridgeForm once we have submission data
+  if (!submission) {
+    return (
+      <div className={`formbridge-resume-page formbridge-resume-page--error ${className}`.trim()}>
+        <div className="formbridge-resume-page__error" role="alert">
+          <h2 className="formbridge-resume-page__error-title">Error</h2>
+          <p className="formbridge-resume-page__error-message">No submission data found.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Success state - render form with submission data
   return (
     <div className={`formbridge-resume-page ${className}`.trim()}>
       <div className="formbridge-resume-page__container">
         <h2 className="formbridge-resume-page__title">Resume Form</h2>
-        <p className="formbridge-resume-page__description">
-          Resume token: {resumeToken}
-        </p>
-        {/* TODO (subtask-3-2): Render FormBridgeForm with fetched data */}
-        <p className="formbridge-resume-page__placeholder">
-          Form will be rendered here once useResumeSubmission hook is implemented.
-        </p>
+        <FormBridgeForm
+          schema={{ type: 'object', properties: {} }}
+          fields={submission.fields}
+          fieldAttribution={submission.fieldAttribution}
+          currentActor={{ kind: 'human', id: 'human-web', name: 'Human User' }}
+        />
       </div>
     </div>
   );

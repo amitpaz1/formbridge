@@ -1,2 +1,10 @@
 # Auto Claude data directory
 .auto-claude/
+
+# Auto Claude machine-specific config
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
+
+# Development verification artifacts
+*VERIFICATION*.md
