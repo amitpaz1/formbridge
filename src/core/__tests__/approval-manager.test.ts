@@ -55,6 +55,19 @@ class MockEventEmitter {
   }
 }
 
+// Mock webhook notifier
+class MockWebhookNotifier {
+  public notifications: any[] = [];
+
+  async notifyReviewers(notification: any): Promise<void> {
+    this.notifications.push(notification);
+  }
+
+  clear() {
+    this.notifications = [];
+  }
+}
+
 describe("ApprovalManager", () => {
   let manager: ApprovalManager;
   let store: MockSubmissionStore;
@@ -544,6 +557,77 @@ describe("ApprovalManager", () => {
       expect((final as any).reviewDecisions[1].action).toBe(
         ApprovalAction.APPROVE
       );
+    });
+  });
+
+  describe("reviewer notifications", () => {
+    let webhookNotifier: MockWebhookNotifier;
+    let managerWithNotifier: ApprovalManager;
+
+    beforeEach(() => {
+      webhookNotifier = new MockWebhookNotifier();
+      managerWithNotifier = new ApprovalManager(store, eventEmitter, webhookNotifier);
+    });
+
+    it("should send notification to reviewers when notifyReviewers is called", async () => {
+      const submission = await createSubmissionInReview();
+      const reviewerIds = ["reviewer_1", "reviewer_2"];
+      const reviewUrl = "https://example.com/review/sub_test_123";
+
+      await managerWithNotifier.notifyReviewers(
+        submission,
+        reviewerIds,
+        reviewUrl
+      );
+
+      expect(webhookNotifier.notifications).toHaveLength(1);
+      expect(webhookNotifier.notifications[0]).toEqual({
+        submissionId: submission.id,
+        intakeId: submission.intakeId,
+        state: submission.state,
+        fields: submission.fields,
+        createdBy: submission.createdBy,
+        reviewerIds,
+        reviewUrl,
+      });
+    });
+
+    it("should send notification without reviewUrl", async () => {
+      const submission = await createSubmissionInReview();
+      const reviewerIds = ["reviewer_1"];
+
+      await managerWithNotifier.notifyReviewers(submission, reviewerIds);
+
+      expect(webhookNotifier.notifications).toHaveLength(1);
+      expect(webhookNotifier.notifications[0].reviewerIds).toEqual(reviewerIds);
+      expect(webhookNotifier.notifications[0].reviewUrl).toBeUndefined();
+    });
+
+    it("should not fail when webhook notifier is not configured", async () => {
+      const submission = await createSubmissionInReview();
+      const reviewerIds = ["reviewer_1"];
+
+      // Manager without webhook notifier (original manager)
+      await expect(
+        manager.notifyReviewers(submission, reviewerIds)
+      ).resolves.not.toThrow();
+    });
+
+    it("should include submission details in notification", async () => {
+      const submission = await createSubmissionInReview();
+      const reviewerIds = ["reviewer_1", "reviewer_2"];
+
+      await managerWithNotifier.notifyReviewers(submission, reviewerIds);
+
+      const notification = webhookNotifier.notifications[0];
+      expect(notification.submissionId).toBe("sub_test_123");
+      expect(notification.intakeId).toBe("intake_vendor_onboarding");
+      expect(notification.state).toBe("needs_review");
+      expect(notification.fields).toEqual({
+        companyName: "Acme Corp",
+        taxId: "12-3456789",
+      });
+      expect(notification.createdBy).toEqual(agentActor);
     });
   });
 });

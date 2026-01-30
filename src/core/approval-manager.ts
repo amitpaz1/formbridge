@@ -75,6 +75,26 @@ export interface EventEmitter {
   emit(event: IntakeEvent): Promise<void>;
 }
 
+/**
+ * Notification payload sent to reviewers when submission needs review
+ */
+export interface ReviewerNotification {
+  submissionId: string;
+  intakeId: string;
+  state: SubmissionState;
+  fields: Record<string, unknown>;
+  createdBy: Actor;
+  reviewerIds: string[];
+  reviewUrl?: string;
+}
+
+/**
+ * Webhook notifier for sending notifications to reviewers
+ */
+export interface WebhookNotifier {
+  notifyReviewers(notification: ReviewerNotification): Promise<void>;
+}
+
 export interface ApproveRequest {
   submissionId: string;
   resumeToken: string;
@@ -112,7 +132,8 @@ export interface ApprovalResponse {
 export class ApprovalManager {
   constructor(
     private store: SubmissionStore,
-    private eventEmitter: EventEmitter
+    private eventEmitter: EventEmitter,
+    private webhookNotifier?: WebhookNotifier
   ) {}
 
   /**
@@ -358,5 +379,32 @@ export class ApprovalManager {
       state: submission.state,
       resumeToken: submission.resumeToken,
     };
+  }
+
+  /**
+   * Notify reviewers that a submission needs review
+   * Sends webhook notification to configured reviewers
+   */
+  async notifyReviewers(
+    submission: Submission,
+    reviewerIds: string[],
+    reviewUrl?: string
+  ): Promise<void> {
+    if (!this.webhookNotifier) {
+      // Webhook notifier not configured, skip notification
+      return;
+    }
+
+    const notification: ReviewerNotification = {
+      submissionId: submission.id,
+      intakeId: submission.intakeId,
+      state: submission.state,
+      fields: submission.fields,
+      createdBy: submission.createdBy,
+      reviewerIds,
+      reviewUrl,
+    };
+
+    await this.webhookNotifier.notifyReviewers(notification);
   }
 }
