@@ -11,11 +11,14 @@ export type {
   IntakeEvent,
   IntakeEventType,
   FieldError,
+  FieldDiff,
   NextAction,
   IntakeError,
   IntakeDefinition,
   ApprovalGate,
   Destination,
+  DeliveryRecord,
+  RetryPolicy,
 } from "./types/intake-contract";
 
 /**
@@ -121,6 +124,21 @@ export interface Submission {
    * TTL in milliseconds
    */
   ttlMs?: number;
+
+  /**
+   * Delivery records for webhook forwarding
+   */
+  deliveries?: import("./types/intake-contract").DeliveryRecord[];
+
+  /**
+   * Current wizard step ID (for multi-step forms)
+   */
+  currentStep?: string;
+
+  /**
+   * Completed wizard step IDs
+   */
+  completedSteps?: string[];
 }
 
 /**

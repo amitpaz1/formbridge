@@ -83,6 +83,57 @@ export interface EnumValue {
 }
 
 /**
+ * Condition operators for conditional field visibility/requirements
+ */
+export type ConditionOperator =
+  | 'eq'
+  | 'neq'
+  | 'in'
+  | 'notIn'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'exists'
+  | 'notExists'
+  | 'matches';
+
+/**
+ * Condition effect — what happens when condition is met
+ */
+export type ConditionEffect = 'visible' | 'required' | 'validation';
+
+/**
+ * Single field condition
+ */
+export interface FieldCondition {
+  when: string; // field path to evaluate
+  operator: ConditionOperator;
+  value?: unknown;
+  effect: ConditionEffect;
+}
+
+/**
+ * Composite condition (AND/OR logic)
+ */
+export interface CompositeCondition {
+  logic: 'and' | 'or';
+  conditions: Array<FieldCondition | CompositeCondition>;
+  effect: ConditionEffect;
+}
+
+/**
+ * Step definition for multi-step wizard forms
+ */
+export interface StepDefinition {
+  id: string;
+  title: string;
+  description?: string;
+  fields: string[];
+  conditions?: Array<FieldCondition | CompositeCondition>;
+}
+
+/**
  * Base field metadata common to all field types
  */
 export interface BaseField {
@@ -92,6 +143,8 @@ export interface BaseField {
   examples?: unknown[];
   required: boolean;
   nullable?: boolean;
+  /** Conditions that control this field's visibility, requirements, or validation */
+  conditions?: Array<FieldCondition | CompositeCondition>;
 }
 
 /**
@@ -219,6 +272,11 @@ export interface IntakeSchema {
    * Root field definition (typically an object)
    */
   schema: IntakeSchemaField;
+
+  /**
+   * Multi-step wizard form definition
+   */
+  steps?: StepDefinition[];
 
   /**
    * Additional metadata from source format

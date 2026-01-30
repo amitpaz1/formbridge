@@ -173,7 +173,19 @@ export type IntakeEventType =
   | "submission.cancelled"
   | "submission.expired"
   | "handoff.link_issued"
-  | "handoff.resumed";
+  | "handoff.resumed"
+  | "step.started"
+  | "step.completed"
+  | "step.validation_failed";
+
+/**
+ * Field-level diff entry for field.updated events
+ */
+export interface FieldDiff {
+  fieldPath: string;
+  previousValue: unknown;
+  newValue: unknown;
+}
 
 /**
  * Typed event for audit trail
@@ -185,7 +197,35 @@ export interface IntakeEvent {
   ts: string;
   actor: Actor;
   state: SubmissionState;
+  /** Monotonically increasing version per submission */
+  version?: number;
   payload?: Record<string, unknown>;
+}
+
+/**
+ * Delivery record for webhook forwarding
+ */
+export interface DeliveryRecord {
+  deliveryId: string;
+  submissionId: string;
+  destinationUrl: string;
+  status: 'pending' | 'succeeded' | 'failed';
+  attempts: number;
+  lastAttemptAt?: string;
+  nextRetryAt?: string;
+  statusCode?: number;
+  error?: string;
+  createdAt: string;
+}
+
+/**
+ * Retry policy for webhook delivery
+ */
+export interface RetryPolicy {
+  maxRetries: number;
+  initialDelayMs: number;
+  maxDelayMs: number;
+  backoffMultiplier: number;
 }
 
 /**

@@ -172,6 +172,9 @@ export class InMemoryEventStore implements EventStore {
   /** Set of all event IDs for duplicate detection */
   private readonly eventIds: Set<string> = new Set();
 
+  /** Monotonically increasing version counter per submission */
+  private readonly versionCounters: Map<string, number> = new Map();
+
   /**
    * Append a new event to the store.
    *
@@ -204,6 +207,12 @@ export class InMemoryEventStore implements EventStore {
       events = [];
       this.eventsBySubmission.set(event.submissionId, events);
     }
+
+    // Auto-assign monotonically increasing version per submission
+    const currentVersion = this.versionCounters.get(event.submissionId) ?? 0;
+    const nextVersion = currentVersion + 1;
+    event.version = nextVersion;
+    this.versionCounters.set(event.submissionId, nextVersion);
 
     // Append event (events are already ordered by timestamp in practice)
     events.push(event);
@@ -353,6 +362,7 @@ export class InMemoryEventStore implements EventStore {
       // Update or remove the submission's event array
       if (retainedEvents.length === 0) {
         this.eventsBySubmission.delete(submissionId);
+        this.versionCounters.delete(submissionId);
       } else if (retainedEvents.length < events.length) {
         this.eventsBySubmission.set(submissionId, retainedEvents);
       }

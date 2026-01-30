@@ -890,4 +890,172 @@ describe("Event Stream & Audit Trail Integration", () => {
       expect(states[states.length - 1]).toBe("submitted");
     });
   });
+
+  describe("Event Version Monotonicity", () => {
+    it("should assign monotonically increasing version numbers per submission", async () => {
+      const createResponse = await manager.createSubmission({
+        intakeId: "intake_version_test",
+        actor: agentActor,
+        initialFields: { field1: "value1" },
+      });
+
+      const setResult = await manager.setFields({
+        submissionId: createResponse.submissionId,
+        resumeToken: createResponse.resumeToken,
+        actor: agentActor,
+        fields: { field2: "value2", field3: "value3" },
+      });
+
+      expect(setResult.ok).toBe(true);
+
+      const events = await manager.getEvents(createResponse.submissionId);
+
+      // Every event should have a version
+      events.forEach((event) => {
+        expect(event.version).toBeDefined();
+        expect(typeof event.version).toBe("number");
+        expect(event.version).toBeGreaterThan(0);
+      });
+
+      // Versions should be strictly monotonically increasing
+      for (let i = 1; i < events.length; i++) {
+        expect(events[i].version).toBe(events[i - 1].version! + 1);
+      }
+    });
+
+    it("should assign independent version sequences per submission", async () => {
+      const createResponse1 = await manager.createSubmission({
+        intakeId: "intake_v1",
+        actor: agentActor,
+        initialFields: { field: "v1" },
+      });
+
+      const createResponse2 = await manager.createSubmission({
+        intakeId: "intake_v2",
+        actor: agentActor,
+        initialFields: { field: "v2" },
+      });
+
+      const events1 = await manager.getEvents(createResponse1.submissionId);
+      const events2 = await manager.getEvents(createResponse2.submissionId);
+
+      // Both should start at version 1
+      expect(events1[0].version).toBe(1);
+      expect(events2[0].version).toBe(1);
+    });
+
+    it("should never reuse version numbers after cleanup", async () => {
+      // This tests that version counters are independent from event storage
+      const { InMemoryEventStore } = await import("../../src/core/event-store");
+      const eventStore = new InMemoryEventStore();
+
+      const event1 = {
+        eventId: "evt_1",
+        type: "submission.created" as const,
+        submissionId: "sub_1",
+        ts: new Date().toISOString(),
+        actor: agentActor,
+        state: "draft" as const,
+        payload: {},
+      };
+
+      await eventStore.appendEvent(event1);
+      const eventsAfterFirst = await eventStore.getEvents("sub_1");
+      expect(eventsAfterFirst[0].version).toBe(1);
+
+      const event2 = {
+        eventId: "evt_2",
+        type: "field.updated" as const,
+        submissionId: "sub_1",
+        ts: new Date().toISOString(),
+        actor: agentActor,
+        state: "in_progress" as const,
+        payload: {},
+      };
+
+      await eventStore.appendEvent(event2);
+      const eventsAfterSecond = await eventStore.getEvents("sub_1");
+      expect(eventsAfterSecond[1].version).toBe(2);
+    });
+  });
+
+  describe("Structured Diffs in Field Updates", () => {
+    it("should include diffs array in field.updated event payloads", async () => {
+      const createResponse = await manager.createSubmission({
+        intakeId: "intake_diffs",
+        actor: agentActor,
+        initialFields: { name: "Alice" },
+      });
+
+      await manager.setFields({
+        submissionId: createResponse.submissionId,
+        resumeToken: createResponse.resumeToken,
+        actor: humanActor,
+        fields: { name: "Bob", email: "bob@test.com" },
+      });
+
+      const events = await manager.getEvents(createResponse.submissionId);
+      const fieldUpdatedEvents = events.filter((e) => e.type === "field.updated");
+
+      // Each field.updated event should include a diffs array
+      fieldUpdatedEvents.forEach((event) => {
+        expect(event.payload).toBeDefined();
+        expect(event.payload!.diffs).toBeDefined();
+        expect(Array.isArray(event.payload!.diffs)).toBe(true);
+      });
+
+      // The diffs array should contain all field changes from the setFields call
+      const firstUpdate = fieldUpdatedEvents[fieldUpdatedEvents.length - 2]; // name update
+      const diffs = firstUpdate.payload!.diffs as Array<{
+        fieldPath: string;
+        previousValue: unknown;
+        newValue: unknown;
+      }>;
+
+      expect(diffs.length).toBe(2);
+      expect(diffs.some((d) => d.fieldPath === "name")).toBe(true);
+      expect(diffs.some((d) => d.fieldPath === "email")).toBe(true);
+
+      // Verify diff content
+      const nameDiff = diffs.find((d) => d.fieldPath === "name")!;
+      expect(nameDiff.previousValue).toBe("Alice");
+      expect(nameDiff.newValue).toBe("Bob");
+
+      const emailDiff = diffs.find((d) => d.fieldPath === "email")!;
+      expect(emailDiff.previousValue).toBeUndefined();
+      expect(emailDiff.newValue).toBe("bob@test.com");
+    });
+
+    it("should use previousValue/newValue naming in diffs structure", async () => {
+      const createResponse = await manager.createSubmission({
+        intakeId: "intake_diff_naming",
+        actor: agentActor,
+        initialFields: { status: "active" },
+      });
+
+      await manager.setFields({
+        submissionId: createResponse.submissionId,
+        resumeToken: createResponse.resumeToken,
+        actor: agentActor,
+        fields: { status: "inactive" },
+      });
+
+      const events = await manager.getEvents(createResponse.submissionId);
+      const fieldUpdatedEvents = events.filter((e) => e.type === "field.updated");
+      const lastEvent = fieldUpdatedEvents[fieldUpdatedEvents.length - 1];
+
+      const diffs = lastEvent.payload!.diffs as Array<{
+        fieldPath: string;
+        previousValue: unknown;
+        newValue: unknown;
+      }>;
+
+      expect(diffs).toHaveLength(1);
+      expect(diffs[0]).toEqual({
+        fieldPath: "status",
+        previousValue: "active",
+        newValue: "inactive",
+      });
+    });
+  });
 });

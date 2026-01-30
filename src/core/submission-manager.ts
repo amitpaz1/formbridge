@@ -301,6 +301,13 @@ export class SubmissionManager {
 
     await this.store.save(submission);
 
+    // Build structured diffs array
+    const diffs = fieldUpdates.map((u) => ({
+      fieldPath: u.fieldPath,
+      previousValue: u.oldValue,
+      newValue: u.newValue,
+    }));
+
     // Emit field.updated event for each field
     for (const fieldUpdate of fieldUpdates) {
       const event: IntakeEvent = {
@@ -314,6 +321,7 @@ export class SubmissionManager {
           fieldPath: fieldUpdate.fieldPath,
           oldValue: fieldUpdate.oldValue,
           newValue: fieldUpdate.newValue,
+          diffs,
         },
       };
 

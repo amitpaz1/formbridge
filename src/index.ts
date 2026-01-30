@@ -133,3 +133,73 @@ export { ApprovalManager } from './core/approval-manager.js';
 export { InMemoryEventStore } from './core/event-store.js';
 export type { EventStore, EventFilters } from './core/event-store.js';
 export { assertValidTransition, InvalidStateTransitionError, VALID_TRANSITIONS } from './core/state-machine.js';
+
+// =============================================================================
+// Webhook & Delivery
+// =============================================================================
+
+export { WebhookManager, signPayload, verifySignature } from './core/webhook-manager.js';
+export type { WebhookManagerOptions, DeliveryPayload, DryRunResult } from './core/webhook-manager.js';
+export { InMemoryDeliveryQueue, DEFAULT_RETRY_POLICY, calculateRetryDelay } from './core/delivery-queue.js';
+export type { DeliveryQueue, DeliveryQueueStats } from './core/delivery-queue.js';
+export { createHonoWebhookRouter } from './routes/hono-webhooks.js';
+
+// =============================================================================
+// Pluggable Storage
+// =============================================================================
+
+export type { FormBridgeStorage, SubmissionStorage, SubmissionFilter, PaginatedResult, PaginationOptions } from './storage/storage-interface.js';
+export { MemoryStorage, InMemorySubmissionStorage } from './storage/memory-storage.js';
+export { SqliteStorage } from './storage/sqlite-storage.js';
+export type { SqliteStorageOptions } from './storage/sqlite-storage.js';
+export { migrateStorage } from './storage/migration.js';
+export type { MigrationResult, MigrationOptions } from './storage/migration.js';
+
+// =============================================================================
+// Analytics
+// =============================================================================
+
+export { createHonoAnalyticsRouter } from './routes/hono-analytics.js';
+export type { AnalyticsDataProvider } from './routes/hono-analytics.js';
+
+// =============================================================================
+// Auth, Authorization & Multi-Tenancy
+// =============================================================================
+
+export {
+  InMemoryApiKeyStore,
+  generateApiKey,
+  hashApiKey,
+  isFormBridgeApiKey,
+} from './auth/api-key-auth.js';
+export type {
+  ApiKey,
+  ApiKeyOperation,
+  ApiKeyStore,
+  CreateApiKeyRequest,
+  CreateApiKeyResult,
+} from './auth/api-key-auth.js';
+
+export { OAuthProvider } from './auth/oauth-provider.js';
+export type {
+  OAuthConfig,
+  JwtClaims,
+  TokenValidationResult,
+} from './auth/oauth-provider.js';
+
+export { hasPermission, getPermissions, getRoles, isValidRole, isRoleAtLeast } from './auth/rbac.js';
+export type { Role, Permission } from './auth/rbac.js';
+
+export { InMemoryTenantStore, getPlanLimits } from './auth/tenant-manager.js';
+export type {
+  Tenant,
+  TenantPlan,
+  TenantStore,
+  CreateTenantRequest,
+} from './auth/tenant-manager.js';
+
+export { RateLimiter } from './auth/rate-limiter.js';
+export type { RateLimitConfig, RateLimitResult } from './auth/rate-limiter.js';
+
+export { createAuthMiddleware, requirePermission, getAuthContext } from './auth/middleware.js';
+export type { AuthConfig, AuthContext } from './auth/middleware.js';

@@ -2,7 +2,7 @@
 
 FormBridge turns your Zod / JSON Schema / OpenAPI into agent-native intake: an embeddable web form for humans and an MCP tool for agents, backed by the same validation and destination. It provides structured retryable errors, idempotent and resumable submissions, upload negotiation, and optional human approval.
 
-This document is the authoritative reference for all 23 FormBridge features across 5 phases. Features 001--012 are **implemented** (PRs merged). Features 013--023 are **planned**.
+This document is the authoritative reference for all 23 FormBridge features across 5 phases. All 23 features are **implemented**.
 
 ---
 
@@ -22,17 +22,17 @@ This document is the authoritative reference for all 23 FormBridge features acro
 | 010 | Mixed-Mode Agent-Human Collaboration | 3 | IMPLEMENTED | should | high | high | 005, 009 |
 | 011 | File Upload Negotiation Protocol | 3 | IMPLEMENTED | should | high | medium | 003, 004 |
 | 012 | Approval Gates & Review Workflow | 3 | IMPLEMENTED | should | medium | medium | 003 |
-| 013 | Event Stream & Audit Trail | 3 | PLANNED | should | medium | medium | 003 |
-| 014 | Webhook & Destination Forwarding | 3 | PLANNED | should | medium | high | 003 |
-| 015 | Developer Documentation & API Reference | 4 | PLANNED | should | medium | high | 002, 003, 004, 005, 006 |
-| 016 | npm Package Publishing & CI/CD Pipeline | 4 | PLANNED | should | medium | high | 001 |
-| 017 | CLI Scaffolding Tool | 4 | PLANNED | could | medium | medium | 002, 004, 005, 006 |
-| 018 | Example Intake Templates Library | 4 | PLANNED | could | low | medium | 002, 003 |
-| 019 | Pluggable Storage Backends | 5 | PLANNED | could | medium | medium | 003, 013 |
-| 020 | Conditional Fields & Dynamic Schema | 5 | PLANNED | could | medium | medium | 002, 003, 005 |
-| 021 | Multi-Step Wizard Forms | 5 | PLANNED | could | medium | medium | 003, 005, 009 |
-| 022 | Admin Dashboard | 5 | PLANNED | could | high | medium | 003, 013, 014 |
-| 023 | Authentication, Authorization & Multi-Tenancy | 5 | PLANNED | could | high | medium | 004, 022 |
+| 013 | Event Stream & Audit Trail | 3 | IMPLEMENTED | should | medium | medium | 003 |
+| 014 | Webhook & Destination Forwarding | 3 | IMPLEMENTED | should | medium | high | 003 |
+| 015 | Developer Documentation & API Reference | 4 | IMPLEMENTED | should | medium | high | 002, 003, 004, 005, 006 |
+| 016 | npm Package Publishing & CI/CD Pipeline | 4 | IMPLEMENTED | should | medium | high | 001 |
+| 017 | CLI Scaffolding Tool | 4 | IMPLEMENTED | could | medium | medium | 002, 004, 005, 006 |
+| 018 | Example Intake Templates Library | 4 | IMPLEMENTED | could | low | medium | 002, 003 |
+| 019 | Pluggable Storage Backends | 5 | IMPLEMENTED | could | medium | medium | 003, 013 |
+| 020 | Conditional Fields & Dynamic Schema | 5 | IMPLEMENTED | could | medium | medium | 002, 003, 005 |
+| 021 | Multi-Step Wizard Forms | 5 | IMPLEMENTED | could | medium | medium | 003, 005, 009 |
+| 022 | Admin Dashboard | 5 | IMPLEMENTED | could | high | medium | 003, 013, 014 |
+| 023 | Authentication, Authorization & Multi-Tenancy | 5 | IMPLEMENTED | could | high | medium | 004, 022 |
 
 ---
 

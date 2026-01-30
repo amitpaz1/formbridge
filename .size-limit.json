@@ -1,0 +1,13 @@
+[
+  {
+    "name": "Core (ESM)",
+    "path": "dist/index.js",
+    "limit": "150 kB",
+    "import": "{ createFormBridgeApp, SubmissionManager }"
+  },
+  {
+    "name": "Full Bundle",
+    "path": "dist/index.js",
+    "limit": "250 kB"
+  }
+]
