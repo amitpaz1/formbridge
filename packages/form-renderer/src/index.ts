@@ -35,3 +35,7 @@ export { ActorBadge } from './components/ActorBadge';
 export type { ActorBadgeProps } from './components/ActorBadge';
 export { FormBridgeForm } from './components/FormBridgeForm';
 export type { FormBridgeFormProps, FormSchema, SchemaProperty } from './components/FormBridgeForm';
+export { ReviewerView } from './components/ReviewerView';
+export type { ReviewerViewProps, ReviewSubmission } from './components/ReviewerView';
+export { ApprovalActions } from './components/ApprovalActions';
+export type { ApprovalActionsProps, FieldComment } from './components/ApprovalActions';
