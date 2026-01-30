@@ -244,12 +244,17 @@ export class SubmissionManager {
 
     // Update fields and record actor attribution
     const now = new Date().toISOString();
-    const updatedFields: string[] = [];
+    const fieldUpdates: Array<{
+      fieldPath: string;
+      oldValue: unknown;
+      newValue: unknown;
+    }> = [];
 
     Object.entries(request.fields).forEach(([fieldPath, value]) => {
+      const oldValue = submission!.fields[fieldPath];
       submission!.fields[fieldPath] = value;
       submission!.fieldAttribution[fieldPath] = request.actor;
-      updatedFields.push(fieldPath);
+      fieldUpdates.push({ fieldPath, oldValue, newValue: value });
     });
 
     // Update metadata
@@ -264,7 +269,7 @@ export class SubmissionManager {
     await this.store.save(submission);
 
     // Emit field.updated event for each field
-    for (const fieldPath of updatedFields) {
+    for (const fieldUpdate of fieldUpdates) {
       const event: IntakeEvent = {
         eventId: `evt_${randomUUID()}`,
         type: "field.updated",
@@ -273,8 +278,8 @@ export class SubmissionManager {
         actor: request.actor,
         state: submission.state,
         payload: {
-          fieldPath,
-          value: request.fields[fieldPath],
+          fieldPath: fieldUpdate.fieldPath,
+          value: fieldUpdate.newValue,
         },
       };
 
