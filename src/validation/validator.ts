@@ -242,8 +242,8 @@ export class Validator {
   ): Promise<ValidationResult<T>> {
     const result = validateSubmission(schema, data);
 
-    // Emit validation.passed event on successful validation
     if (result.success) {
+      // Emit validation.passed event on successful validation
       const event: IntakeEvent = {
         eventId: `evt_${randomUUID()}`,
         type: 'validation.passed',
@@ -253,6 +253,21 @@ export class Validator {
         state,
         payload: {
           data: result.data,
+        },
+      };
+
+      await this.emitEvent(event);
+    } else {
+      // Emit validation.failed event on validation errors
+      const event: IntakeEvent = {
+        eventId: `evt_${randomUUID()}`,
+        type: 'validation.failed',
+        submissionId,
+        ts: new Date().toISOString(),
+        actor,
+        state,
+        payload: {
+          errors: result.error.errors,
         },
       };
 
@@ -300,7 +315,21 @@ export class Validator {
       return result.data;
     }
 
-    // On failure, throw the error (no event emitted here - that's for next subtask)
+    // Emit validation.failed event on validation errors
+    const event: IntakeEvent = {
+      eventId: `evt_${randomUUID()}`,
+      type: 'validation.failed',
+      submissionId,
+      ts: new Date().toISOString(),
+      actor,
+      state,
+      payload: {
+        errors: result.error.errors,
+      },
+    };
+
+    await this.emitEvent(event);
+
     throw result.error;
   }
 
@@ -334,6 +363,21 @@ export class Validator {
         state,
         payload: {
           data: result.data,
+        },
+      };
+
+      await this.emitEvent(event);
+    } else {
+      // Emit validation.failed event on validation errors
+      const event: IntakeEvent = {
+        eventId: `evt_${randomUUID()}`,
+        type: 'validation.failed',
+        submissionId,
+        ts: new Date().toISOString(),
+        actor,
+        state,
+        payload: {
+          errors: result.error.errors,
         },
       };
 
