@@ -7,6 +7,7 @@
 
 import type { z } from 'zod';
 import type { SubmissionResponse } from './intake-contract.js';
+import type { StorageBackend } from '../storage/storage-backend.js';
 
 /**
  * MCP Tool definition for intake forms
@@ -150,6 +151,8 @@ export interface MCPServerConfig {
   transport: TransportConfig;
   /** Optional logging level */
   logLevel?: 'debug' | 'info' | 'warn' | 'error';
+  /** Optional storage backend for file uploads */
+  storageBackend?: StorageBackend;
 }
 
 /**

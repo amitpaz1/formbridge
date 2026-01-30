@@ -63,6 +63,7 @@ export class FormBridgeMCPServer {
   private intakes = new Map<string, IntakeDefinition>();
   private tools = new Map<string, GeneratedTools>();
   private store = new SubmissionStore();
+  private storageBackend?: typeof this.config.storageBackend;
 
   /**
    * Creates a new FormBridge MCP server instance
@@ -71,6 +72,7 @@ export class FormBridgeMCPServer {
    */
   constructor(config: MCPServerConfig) {
     this.config = config;
+    this.storageBackend = config.storageBackend;
 
     // Initialize the MCP SDK server
     this.server = new Server(
@@ -639,7 +641,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error;
+      return error as unknown as Record<string, unknown>;
     }
 
     // Verify intake ID matches
@@ -658,26 +660,96 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error;
+      return error as unknown as Record<string, unknown>;
     }
 
-    // For now, return a not implemented error
-    // TODO: Implement storage backend integration in future iteration
-    const error: IntakeError = {
-      type: 'invalid',
-      message: 'File upload not yet supported in MCP server',
-      fields: [{
-        field: field,
-        message: 'Storage backend not configured for MCP server',
-        type: 'invalid'
-      }],
-      nextActions: [{
-        type: 'validate',
-        description: 'Use the HTTP API for file upload operations'
-      }],
-      timestamp: new Date().toISOString()
-    };
-    return error;
+    // Check if storage backend is configured
+    if (!this.storageBackend) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: 'File upload not supported - storage backend not configured',
+        fields: [{
+          field: field,
+          message: 'Storage backend not configured for MCP server',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Configure storage backend in MCPServerConfig'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error as unknown as Record<string, unknown>;
+    }
+
+    try {
+      // Generate signed upload URL via storage backend
+      const signedUrl = await this.storageBackend.generateUploadUrl({
+        intakeId: intake.id,
+        submissionId: entry.submissionId,
+        fieldPath: field,
+        filename,
+        mimeType,
+        constraints: {
+          maxSize: sizeBytes,
+          allowedTypes: [mimeType],
+          maxCount: 1,
+        }
+      });
+
+      // Initialize uploads map if not exists
+      if (!entry.uploads) {
+        entry.uploads = {};
+      }
+
+      // Track upload in submission
+      entry.uploads[signedUrl.uploadId] = {
+        uploadId: signedUrl.uploadId,
+        field,
+        filename,
+        mimeType,
+        sizeBytes,
+        status: 'pending',
+        url: signedUrl.url,
+      };
+
+      // Update submission entry
+      this.store.update(resumeToken, { uploads: entry.uploads });
+
+      // Calculate expiration time in milliseconds
+      const expiresAt = new Date(signedUrl.expiresAt);
+      const now = new Date();
+      const expiresInMs = expiresAt.getTime() - now.getTime();
+
+      // Return signed URL info
+      return {
+        ok: true,
+        uploadId: signedUrl.uploadId,
+        method: signedUrl.method,
+        url: signedUrl.url,
+        expiresInMs: Math.max(0, expiresInMs),
+        constraints: {
+          maxBytes: sizeBytes,
+          accept: [mimeType],
+        },
+      };
+    } catch (error) {
+      const err: IntakeError = {
+        type: 'invalid',
+        message: 'Failed to generate upload URL',
+        fields: [{
+          field: field,
+          message: error instanceof Error ? error.message : 'Unknown error',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Try again or contact support'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return err as unknown as Record<string, unknown>;
+    }
   }
 
   /**
@@ -715,7 +787,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error;
+      return error as unknown as Record<string, unknown>;
     }
 
     // Verify intake ID matches
@@ -734,26 +806,97 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error;
+      return error as unknown as Record<string, unknown>;
     }
 
-    // For now, return a not implemented error
-    // TODO: Implement storage backend integration in future iteration
-    const error: IntakeError = {
-      type: 'invalid',
-      message: 'File upload not yet supported in MCP server',
-      fields: [{
-        field: 'uploadId',
-        message: 'Storage backend not configured for MCP server',
-        type: 'invalid'
-      }],
-      nextActions: [{
-        type: 'validate',
-        description: 'Use the HTTP API for file upload operations'
-      }],
-      timestamp: new Date().toISOString()
-    };
-    return error;
+    // Check if storage backend is configured
+    if (!this.storageBackend) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: 'File upload not supported - storage backend not configured',
+        fields: [{
+          field: 'uploadId',
+          message: 'Storage backend not configured for MCP server',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Configure storage backend in MCPServerConfig'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error as unknown as Record<string, unknown>;
+    }
+
+    // Check if upload exists
+    if (!entry.uploads || !entry.uploads[uploadId]) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: 'Upload not found',
+        fields: [{
+          field: 'uploadId',
+          message: `Upload ${uploadId} not found for this submission`,
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Request a new upload'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error as unknown as Record<string, unknown>;
+    }
+
+    try {
+      // Verify upload via storage backend
+      const uploadStatus = await this.storageBackend.verifyUpload(uploadId);
+
+      // Update upload status
+      const upload = entry.uploads[uploadId];
+      if (uploadStatus.status === 'completed' && uploadStatus.file) {
+        upload.status = 'completed';
+        upload.uploadedAt = new Date();
+
+        // Generate download URL
+        const downloadUrl = await this.storageBackend.generateDownloadUrl(uploadId);
+        if (downloadUrl) {
+          upload.downloadUrl = downloadUrl;
+        }
+      } else if (uploadStatus.status === 'failed') {
+        upload.status = 'failed';
+        upload.error = uploadStatus.error;
+      }
+
+      // Update submission entry
+      this.store.update(resumeToken, { uploads: entry.uploads });
+
+      // Return confirmation
+      return {
+        ok: true,
+        submissionId: entry.submissionId,
+        uploadId,
+        field: upload.field,
+        status: upload.status,
+        uploadedAt: upload.uploadedAt?.toISOString(),
+        downloadUrl: upload.downloadUrl,
+      };
+    } catch (error) {
+      const err: IntakeError = {
+        type: 'invalid',
+        message: 'Failed to verify upload',
+        fields: [{
+          field: 'uploadId',
+          message: error instanceof Error ? error.message : 'Unknown error',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Try again or request a new upload'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return err as unknown as Record<string, unknown>;
+    }
   }
 
   /**

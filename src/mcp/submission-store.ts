@@ -9,6 +9,32 @@ import { randomBytes } from 'crypto';
 import { SubmissionState, type Actor } from '../types/intake-contract.js';
 
 /**
+ * Upload metadata for a submission
+ */
+export interface UploadEntry {
+  /** Unique upload identifier */
+  uploadId: string;
+  /** Field path this upload is for */
+  field: string;
+  /** Original filename */
+  filename: string;
+  /** MIME type */
+  mimeType: string;
+  /** Size in bytes */
+  sizeBytes: number;
+  /** Upload status */
+  status: 'pending' | 'completed' | 'failed';
+  /** Signed upload URL */
+  url?: string;
+  /** When upload was completed */
+  uploadedAt?: Date;
+  /** Download URL if completed */
+  downloadUrl?: string;
+  /** Error message if failed */
+  error?: string;
+}
+
+/**
  * Submission state entry stored in memory
  */
 export interface SubmissionEntry {
@@ -30,6 +56,8 @@ export interface SubmissionEntry {
   updatedAt: Date;
   /** Actor who created the submission */
   actor?: Actor;
+  /** File uploads for this submission */
+  uploads?: Record<string, UploadEntry>;
 }
 
 /**
