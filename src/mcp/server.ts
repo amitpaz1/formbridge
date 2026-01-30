@@ -168,6 +168,16 @@ export class FormBridgeMCPServer {
             name: generatedTools.submit.name,
             description: generatedTools.submit.description,
             inputSchema: generatedTools.submit.inputSchema
+          },
+          {
+            name: generatedTools.requestUpload.name,
+            description: generatedTools.requestUpload.description,
+            inputSchema: generatedTools.requestUpload.inputSchema
+          },
+          {
+            name: generatedTools.confirmUpload.name,
+            description: generatedTools.confirmUpload.description,
+            inputSchema: generatedTools.confirmUpload.inputSchema
           }
         );
       }
@@ -232,7 +242,7 @@ export class FormBridgeMCPServer {
     }
 
     // Execute the appropriate operation
-    let response: SubmissionResponse;
+    let response: SubmissionResponse | Record<string, unknown>;
     try {
       switch (operation) {
         case 'create':
@@ -246,6 +256,12 @@ export class FormBridgeMCPServer {
           break;
         case 'submit':
           response = await this.handleSubmit(intake, args);
+          break;
+        case 'requestUpload':
+          response = await this.handleRequestUpload(intake, args);
+          break;
+        case 'confirmUpload':
+          response = await this.handleConfirmUpload(intake, args);
           break;
         default:
           throw new Error(`Unknown operation: ${operation}`);
@@ -577,6 +593,167 @@ export class FormBridgeMCPServer {
       data: validationResult.data,
       timestamp: new Date().toISOString()
     };
+  }
+
+  /**
+   * Handles the requestUpload operation
+   *
+   * Requests a signed URL for file upload.
+   *
+   * @param intake - The intake definition for this submission
+   * @param args - Arguments containing resumeToken, field, filename, mimeType, sizeBytes
+   * @returns Upload URL information or error
+   */
+  private async handleRequestUpload(
+    intake: IntakeDefinition,
+    args: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const {
+      resumeToken,
+      field,
+      filename,
+      mimeType,
+      sizeBytes
+    } = args as {
+      resumeToken: string;
+      field: string;
+      filename: string;
+      mimeType: string;
+      sizeBytes: number;
+    };
+
+    // Get existing submission
+    const entry = this.store.get(resumeToken);
+    if (!entry) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: 'Invalid resume token',
+        fields: [{
+          field: 'resumeToken',
+          message: 'Resume token not found or has expired',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'create',
+          description: 'Create a new submission'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error;
+    }
+
+    // Verify intake ID matches
+    if (entry.intakeId !== intake.id) {
+      const error: IntakeError = {
+        type: 'conflict',
+        message: 'Resume token belongs to a different intake form',
+        fields: [{
+          field: 'resumeToken',
+          message: `Token is for intake '${entry.intakeId}', not '${intake.id}'`,
+          type: 'conflict'
+        }],
+        nextActions: [{
+          type: 'create',
+          description: 'Create a new submission for this intake form'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error;
+    }
+
+    // For now, return a not implemented error
+    // TODO: Implement storage backend integration in future iteration
+    const error: IntakeError = {
+      type: 'invalid',
+      message: 'File upload not yet supported in MCP server',
+      fields: [{
+        field: field,
+        message: 'Storage backend not configured for MCP server',
+        type: 'invalid'
+      }],
+      nextActions: [{
+        type: 'validate',
+        description: 'Use the HTTP API for file upload operations'
+      }],
+      timestamp: new Date().toISOString()
+    };
+    return error;
+  }
+
+  /**
+   * Handles the confirmUpload operation
+   *
+   * Confirms completion of a file upload.
+   *
+   * @param intake - The intake definition for this submission
+   * @param args - Arguments containing resumeToken and uploadId
+   * @returns Confirmation status or error
+   */
+  private async handleConfirmUpload(
+    intake: IntakeDefinition,
+    args: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
+    const { resumeToken, uploadId } = args as {
+      resumeToken: string;
+      uploadId: string;
+    };
+
+    // Get existing submission
+    const entry = this.store.get(resumeToken);
+    if (!entry) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: 'Invalid resume token',
+        fields: [{
+          field: 'resumeToken',
+          message: 'Resume token not found or has expired',
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'create',
+          description: 'Create a new submission'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error;
+    }
+
+    // Verify intake ID matches
+    if (entry.intakeId !== intake.id) {
+      const error: IntakeError = {
+        type: 'conflict',
+        message: 'Resume token belongs to a different intake form',
+        fields: [{
+          field: 'resumeToken',
+          message: `Token is for intake '${entry.intakeId}', not '${intake.id}'`,
+          type: 'conflict'
+        }],
+        nextActions: [{
+          type: 'create',
+          description: 'Create a new submission for this intake form'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return error;
+    }
+
+    // For now, return a not implemented error
+    // TODO: Implement storage backend integration in future iteration
+    const error: IntakeError = {
+      type: 'invalid',
+      message: 'File upload not yet supported in MCP server',
+      fields: [{
+        field: 'uploadId',
+        message: 'Storage backend not configured for MCP server',
+        type: 'invalid'
+      }],
+      nextActions: [{
+        type: 'validate',
+        description: 'Use the HTTP API for file upload operations'
+      }],
+      timestamp: new Date().toISOString()
+    };
+    return error;
   }
 
   /**
