@@ -141,12 +141,11 @@ export const FileField: React.FC<FileFieldProps> = ({
   const [filePreviews, setFilePreviews] = useState<Map<string, FilePreview>>(new Map());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Get current files as array
-  const currentFiles: File[] = value
-    ? Array.isArray(value)
-      ? value
-      : [value]
-    : [];
+  // Get current files as array (memoized to prevent infinite re-renders in useEffect)
+  const currentFiles: File[] = useMemo(
+    () => (value ? (Array.isArray(value) ? value : [value]) : []),
+    [value]
+  );
 
   /**
    * Generate a unique key for a file (name + size + lastModified)

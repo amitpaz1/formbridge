@@ -15,7 +15,7 @@
  * - Automatic expiration of upload URLs
  */
 
-import { randomBytes, createHmac } from 'crypto';
+import { randomBytes, createHmac, timingSafeEqual } from 'crypto';
 import { promises as fs } from 'fs';
 import { join, dirname, basename } from 'path';
 import type {
@@ -366,9 +366,15 @@ export class LocalStorageBackend implements StorageBackend {
       return false;
     }
 
-    // Verify signature
+    // Verify signature using timing-safe comparison
     const expectedSignature = this.generateSignature(uploadId, expiresAt);
-    return signature === expectedSignature;
+    if (signature.length !== expectedSignature.length) {
+      return false;
+    }
+    return timingSafeEqual(
+      Buffer.from(signature, 'utf-8'),
+      Buffer.from(expectedSignature, 'utf-8')
+    );
   }
 
   /**
@@ -428,9 +434,13 @@ export class LocalStorageBackend implements StorageBackend {
     uploadId: string,
     filename: string
   ): string {
-    // Sanitize filename to prevent path traversal
-    const sanitizedFilename = basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-    return join('uploads', intakeId, submissionId, `${uploadId}-${sanitizedFilename}`);
+    // Sanitize all path components to prevent path traversal
+    const sanitize = (s: string) => basename(s).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sanitizedIntakeId = sanitize(intakeId);
+    const sanitizedSubmissionId = sanitize(submissionId);
+    const sanitizedUploadId = sanitize(uploadId);
+    const sanitizedFilename = sanitize(filename);
+    return join('uploads', sanitizedIntakeId, sanitizedSubmissionId, `${sanitizedUploadId}-${sanitizedFilename}`);
   }
 
   /**

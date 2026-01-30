@@ -299,9 +299,11 @@ export class SubmissionManager {
     // Get submission and validate resume token
     const submission = this.getAndValidateSubmission(input.submissionId, input.resumeToken);
 
-    // TODO: Validate field exists in intakeDefinition.schema and is a file field
-    // For now, we trust the caller to provide valid field names
-    void intakeDefinition;
+    // Validate field exists in the schema
+    const fieldSchema = intakeDefinition.schema?.properties?.[input.field];
+    if (!fieldSchema) {
+      throw new Error(`Field '${input.field}' not found in intake schema`);
+    }
 
     // Generate signed upload URL from storage backend
     const signedUrl = await this.storageBackend.generateUploadUrl({
@@ -419,10 +421,6 @@ export class SubmissionManager {
     }
     submission.metadata.updatedAt = new Date().toISOString();
 
-    // Generate new resume token
-    const newResumeToken = this.generateResumeToken();
-    submission.resumeToken = newResumeToken;
-
     // Update submission state based on upload result
     if (mappedStatus === 'completed') {
       // Check if there are any remaining pending uploads
@@ -434,6 +432,10 @@ export class SubmissionManager {
       if (!hasPendingUploads && submission.state === 'awaiting_upload') {
         submission.state = 'in_progress';
       }
+
+      // Rotate resume token only after successful verification
+      const newResumeToken = this.generateResumeToken();
+      submission.resumeToken = newResumeToken;
 
       // Emit upload completed event
       this.emitEvent({
@@ -450,8 +452,16 @@ export class SubmissionManager {
           sizeBytes: uploadStatus.sizeBytes,
         },
       });
+
+      return {
+        ok: true,
+        submissionId: submission.id,
+        state: submission.state,
+        resumeToken: newResumeToken,
+        field: uploadStatus.field,
+      };
     } else {
-      // Emit upload failed event
+      // Emit upload failed event (do NOT rotate resume token on failure)
       this.emitEvent({
         eventId: this.generateEventId(),
         type: 'upload.failed',
@@ -470,14 +480,6 @@ export class SubmissionManager {
         `Upload verification failed: ${verificationResult.error ?? 'Unknown error'}`
       );
     }
-
-    return {
-      ok: true,
-      submissionId: submission.id,
-      state: submission.state,
-      resumeToken: newResumeToken,
-      field: uploadStatus.field,
-    };
   }
 
   /**

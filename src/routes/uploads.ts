@@ -155,6 +155,17 @@ export function createUploadRouter(
         return c.json(errorResponse, 400);
       }
 
+      if (!Number.isFinite(body.sizeBytes) || body.sizeBytes <= 0 || !Number.isInteger(body.sizeBytes)) {
+        const errorResponse: UploadErrorResponse = {
+          ok: false,
+          error: {
+            type: 'invalid_request',
+            message: 'sizeBytes must be a positive integer',
+          },
+        };
+        return c.json(errorResponse, 400);
+      }
+
       // Retrieve intake definition
       const intakeDefinition = registry.getIntake(intakeId);
 
@@ -192,10 +203,10 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'invalid_resume_token',
-            message: error.message,
+            message: 'Invalid or expired resume token',
           },
         };
-        return c.json(errorResponse, 401);
+        return c.json(errorResponse, 409);
       }
 
       // Handle submission not found
@@ -204,7 +215,7 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'not_found',
-            message: error.message,
+            message: 'Submission or resource not found',
           },
         };
         return c.json(errorResponse, 404);
@@ -216,7 +227,7 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'storage_error',
-            message: error.message,
+            message: 'Storage backend error',
           },
         };
         return c.json(errorResponse, 500);
@@ -227,7 +238,7 @@ export function createUploadRouter(
         ok: false,
         error: {
           type: 'internal_error',
-          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          message: 'An internal error occurred',
         },
       };
       return c.json(errorResponse, 500);
@@ -330,10 +341,10 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'invalid_resume_token',
-            message: error.message,
+            message: 'Invalid or expired resume token',
           },
         };
-        return c.json(errorResponse, 401);
+        return c.json(errorResponse, 409);
       }
 
       // Handle submission or upload not found
@@ -342,7 +353,7 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'not_found',
-            message: error.message,
+            message: 'Submission or resource not found',
           },
         };
         return c.json(errorResponse, 404);
@@ -354,7 +365,7 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'storage_error',
-            message: error.message,
+            message: 'Upload verification failed',
           },
         };
         return c.json(errorResponse, 400);
@@ -366,7 +377,7 @@ export function createUploadRouter(
           ok: false,
           error: {
             type: 'storage_error',
-            message: error.message,
+            message: 'Storage backend error',
           },
         };
         return c.json(errorResponse, 500);
@@ -377,7 +388,7 @@ export function createUploadRouter(
         ok: false,
         error: {
           type: 'internal_error',
-          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          message: 'An internal error occurred',
         },
       };
       return c.json(errorResponse, 500);

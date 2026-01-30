@@ -21,9 +21,18 @@ import type {
 import { SubmissionState } from '../types/intake-contract.js';
 import type { MCPServerConfig } from '../types/mcp-types.js';
 import { generateToolsFromIntake, parseToolName, type GeneratedTools } from './tool-generator.js';
+import { convertZodToJsonSchema } from '../schemas/json-schema-converter.js';
 import { validateSubmission, validatePartialSubmission } from '../validation/validator.js';
 import { mapToIntakeError } from '../validation/error-mapper.js';
 import { SubmissionStore } from './submission-store.js';
+
+/**
+ * Converts an IntakeError to a plain Record for use as a response object.
+ * Avoids the `as unknown as Record<string, unknown>` type erasure pattern.
+ */
+function toRecord(error: IntakeError): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(error));
+}
 
 /**
  * FormBridge MCP Server
@@ -641,7 +650,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     // Verify intake ID matches
@@ -660,7 +669,30 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
+    }
+
+    // Validate field exists in intake schema
+    const jsonSchema = convertZodToJsonSchema(intake.schema, {
+      name: intake.name,
+      includeSchemaProperty: false
+    });
+    if (!jsonSchema.properties || !(field in jsonSchema.properties)) {
+      const error: IntakeError = {
+        type: 'invalid',
+        message: `Field '${field}' not found in intake schema`,
+        fields: [{
+          field: field,
+          message: `Field '${field}' does not exist in the intake definition`,
+          type: 'invalid'
+        }],
+        nextActions: [{
+          type: 'validate',
+          description: 'Use a valid field name from the intake schema'
+        }],
+        timestamp: new Date().toISOString()
+      };
+      return toRecord(error);
     }
 
     // Check if storage backend is configured
@@ -679,7 +711,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     try {
@@ -748,7 +780,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return err as unknown as Record<string, unknown>;
+      return toRecord(err);
     }
   }
 
@@ -787,7 +819,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     // Verify intake ID matches
@@ -806,7 +838,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     // Check if storage backend is configured
@@ -825,7 +857,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     // Check if upload exists
@@ -844,7 +876,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return error as unknown as Record<string, unknown>;
+      return toRecord(error);
     }
 
     try {
@@ -895,7 +927,7 @@ export class FormBridgeMCPServer {
         }],
         timestamp: new Date().toISOString()
       };
-      return err as unknown as Record<string, unknown>;
+      return toRecord(err);
     }
   }
 

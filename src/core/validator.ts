@@ -228,10 +228,10 @@ export class Validator {
       const fieldSchema = this.getFieldSchema(fieldPath, schema);
       const isRequired = schema.required?.includes(fieldPath) ?? false;
 
-      // Find upload status for this field
-      const upload = Object.values(uploads).find((u) => u.field === fieldPath);
+      // Find all uploads for this field
+      const fieldUploads = Object.values(uploads).filter((u) => u.field === fieldPath);
 
-      if (!upload) {
+      if (fieldUploads.length === 0) {
         // No upload initiated for this field
         if (isRequired) {
           missingFields.push(fieldPath);
@@ -246,34 +246,36 @@ export class Validator {
         continue;
       }
 
-      // Check upload status
-      if (upload.status === 'pending') {
-        if (isRequired) {
-          missingFields.push(fieldPath);
+      // Check each upload's status
+      for (const upload of fieldUploads) {
+        if (upload.status === 'pending') {
+          if (isRequired) {
+            missingFields.push(fieldPath);
+            errors.push({
+              path: fieldPath,
+              code: 'file_required',
+              message: `File upload for '${fieldPath}' is still pending`,
+              expected: 'a completed file upload',
+              received: 'pending upload',
+            });
+          }
+        } else if (upload.status === 'failed') {
+          invalidFields.push(fieldPath);
           errors.push({
             path: fieldPath,
             code: 'file_required',
-            message: `File upload for '${fieldPath}' is still pending`,
+            message: `File upload for '${fieldPath}' failed`,
             expected: 'a completed file upload',
-            received: 'pending upload',
+            received: 'failed upload',
           });
-        }
-      } else if (upload.status === 'failed') {
-        invalidFields.push(fieldPath);
-        errors.push({
-          path: fieldPath,
-          code: 'file_required',
-          message: `File upload for '${fieldPath}' failed`,
-          expected: 'a completed file upload',
-          received: 'failed upload',
-        });
-      } else if (upload.status === 'completed') {
-        // Validate file constraints
-        if (fieldSchema) {
-          const constraintErrors = this.validateFileConstraints(fieldPath, upload, fieldSchema);
-          errors.push(...constraintErrors);
-          if (constraintErrors.length > 0) {
-            invalidFields.push(fieldPath);
+        } else if (upload.status === 'completed') {
+          // Validate file constraints
+          if (fieldSchema) {
+            const constraintErrors = this.validateFileConstraints(fieldPath, upload, fieldSchema);
+            errors.push(...constraintErrors);
+            if (constraintErrors.length > 0) {
+              invalidFields.push(fieldPath);
+            }
           }
         }
       }

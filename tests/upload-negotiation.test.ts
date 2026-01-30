@@ -570,13 +570,12 @@ describe('Upload Negotiation Integration Tests', () => {
         }
       );
 
-      expect(res.status).toBe(401);
+      expect(res.status).toBe(409);
       const body = await res.json();
       expect(body).toMatchObject({
         ok: false,
         error: {
           type: 'invalid_resume_token',
-          message: expect.stringContaining('Invalid resume token'),
         },
       });
     });

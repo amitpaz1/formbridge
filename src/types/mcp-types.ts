@@ -207,7 +207,11 @@ export enum ToolOperation {
   /** Validate current submission state without submitting */
   VALIDATE = 'validate',
   /** Submit the intake form */
-  SUBMIT = 'submit'
+  SUBMIT = 'submit',
+  /** Request a signed URL for file upload */
+  REQUEST_UPLOAD = 'requestUpload',
+  /** Confirm completion of a file upload */
+  CONFIRM_UPLOAD = 'confirmUpload'
 }
 
 /**
