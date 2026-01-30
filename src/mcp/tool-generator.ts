@@ -2,7 +2,7 @@
  * FormBridge MCP Tool Generator
  *
  * This module generates MCP tool definitions from IntakeDefinition schemas.
- * Each intake form is exposed as a set of 4 MCP tools that agents can use
+ * Each intake form is exposed as a set of 6 MCP tools that agents can use
  * to submit structured data through the Intake Contract protocol.
  *
  * Generated tools:
@@ -10,6 +10,8 @@
  * - {intakeId}_set: Set/update field values in an existing submission
  * - {intakeId}_validate: Validate current submission state without submitting
  * - {intakeId}_submit: Submit the intake form
+ * - {intakeId}_requestUpload: Request a signed URL for file upload
+ * - {intakeId}_confirmUpload: Confirm completion of a file upload
  */
 
 import { convertZodToJsonSchema, type JsonSchema } from '../schemas/json-schema-converter.js';
@@ -40,20 +42,26 @@ export interface GeneratedTools {
   validate: MCPToolDefinition;
   /** Submit tool definition */
   submit: MCPToolDefinition;
+  /** Request upload tool definition */
+  requestUpload: MCPToolDefinition;
+  /** Confirm upload tool definition */
+  confirmUpload: MCPToolDefinition;
 }
 
 /**
  * Generates MCP tool definitions from an IntakeDefinition
  *
- * Creates four tools per intake form following the Intake Contract protocol:
+ * Creates six tools per intake form following the Intake Contract protocol:
  * - create: Initializes a new submission session with optional initial data
  * - set: Updates field values in an existing submission session
  * - validate: Validates the current submission state without submitting
  * - submit: Finalizes and submits the intake form
+ * - requestUpload: Requests a signed URL for file upload
+ * - confirmUpload: Confirms completion of a file upload
  *
  * @param intake - The intake definition to generate tools from
  * @param options - Optional tool generation options
- * @returns Object containing all four generated tool definitions
+ * @returns Object containing all six generated tool definitions
  *
  * @example
  * ```typescript
@@ -69,7 +77,7 @@ export interface GeneratedTools {
  * };
  *
  * const tools = generateToolsFromIntake(vendorIntake);
- * // tools.create, tools.set, tools.validate, tools.submit
+ * // tools.create, tools.set, tools.validate, tools.submit, tools.requestUpload, tools.confirmUpload
  * ```
  */
 export function generateToolsFromIntake(
@@ -132,7 +140,19 @@ export function generateToolsFromIntake(
     requiredFields
   );
 
-  return { create, set, validate, submit };
+  const requestUpload = generateRequestUploadTool(
+    toolPrefix,
+    intake.name,
+    intake.description
+  );
+
+  const confirmUpload = generateConfirmUploadTool(
+    toolPrefix,
+    intake.name,
+    intake.description
+  );
+
+  return { create, set, validate, submit, requestUpload, confirmUpload };
 }
 
 /**
@@ -342,6 +362,104 @@ function generateSubmitTool(
 }
 
 /**
+ * Generates the requestUpload tool definition
+ *
+ * The requestUpload tool initiates a file upload by requesting a signed URL.
+ * It requires a resumeToken and file metadata (field, filename, mimeType, sizeBytes).
+ *
+ * @param toolPrefix - The intake ID used as tool name prefix
+ * @param intakeName - Human-readable name of the intake form
+ * @param intakeDescription - Optional description of the intake form
+ * @returns MCP tool definition for the requestUpload operation
+ */
+function generateRequestUploadTool(
+  toolPrefix: string,
+  intakeName: string,
+  intakeDescription: string | undefined
+): MCPToolDefinition {
+  const toolName = `${toolPrefix}_requestUpload`;
+  const baseDescription = intakeDescription || intakeName;
+  const description = `Request a signed URL to upload a file for ${baseDescription}. Provide file metadata (field name, filename, MIME type, size) and receive a signed URL with upload constraints. Use this before uploading files to the submission.`;
+
+  const inputSchema: MCPToolDefinition['inputSchema'] = {
+    type: 'object',
+    properties: {
+      resumeToken: {
+        type: 'string',
+        description: 'Resume token from previous create or set call'
+      },
+      field: {
+        type: 'string',
+        description: 'Dot-path to the file field (e.g., "documents.w9_form")'
+      },
+      filename: {
+        type: 'string',
+        description: 'Name of the file to upload'
+      },
+      mimeType: {
+        type: 'string',
+        description: 'MIME type of the file (e.g., "application/pdf", "image/jpeg")'
+      },
+      sizeBytes: {
+        type: 'number',
+        description: 'Size of the file in bytes'
+      }
+    },
+    required: ['resumeToken', 'field', 'filename', 'mimeType', 'sizeBytes'],
+    additionalProperties: false
+  };
+
+  return {
+    name: toolName,
+    description,
+    inputSchema
+  };
+}
+
+/**
+ * Generates the confirmUpload tool definition
+ *
+ * The confirmUpload tool confirms completion of a file upload.
+ * It requires a resumeToken and the uploadId returned from requestUpload.
+ *
+ * @param toolPrefix - The intake ID used as tool name prefix
+ * @param intakeName - Human-readable name of the intake form
+ * @param intakeDescription - Optional description of the intake form
+ * @returns MCP tool definition for the confirmUpload operation
+ */
+function generateConfirmUploadTool(
+  toolPrefix: string,
+  intakeName: string,
+  intakeDescription: string | undefined
+): MCPToolDefinition {
+  const toolName = `${toolPrefix}_confirmUpload`;
+  const baseDescription = intakeDescription || intakeName;
+  const description = `Confirm completion of a file upload for ${baseDescription}. Call this after successfully uploading a file to the signed URL received from requestUpload. The system will verify the upload and update the submission status.`;
+
+  const inputSchema: MCPToolDefinition['inputSchema'] = {
+    type: 'object',
+    properties: {
+      resumeToken: {
+        type: 'string',
+        description: 'Resume token from previous create or set call'
+      },
+      uploadId: {
+        type: 'string',
+        description: 'Upload ID returned from requestUpload'
+      }
+    },
+    required: ['resumeToken', 'uploadId'],
+    additionalProperties: false
+  };
+
+  return {
+    name: toolName,
+    description,
+    inputSchema
+  };
+}
+
+/**
  * Generates a descriptive tool description including field information
  *
  * @param operation - The tool operation type (create or set)
@@ -425,7 +543,7 @@ function extractFieldDescriptions(jsonSchema: JsonSchema): Record<string, string
 /**
  * Tool operation types
  */
-export type ToolOperation = 'create' | 'set' | 'validate' | 'submit';
+export type ToolOperation = 'create' | 'set' | 'validate' | 'submit' | 'requestUpload' | 'confirmUpload';
 
 /**
  * Generates a tool name from intake ID and operation
@@ -455,7 +573,7 @@ export function parseToolName(toolName: string): { intakeId: string; operation: 
   const operation = toolName.substring(lastUnderscoreIndex + 1) as ToolOperation;
 
   // Validate operation
-  const validOperations: ToolOperation[] = ['create', 'set', 'validate', 'submit'];
+  const validOperations: ToolOperation[] = ['create', 'set', 'validate', 'submit', 'requestUpload', 'confirmUpload'];
   if (!validOperations.includes(operation)) {
     return null;
   }
