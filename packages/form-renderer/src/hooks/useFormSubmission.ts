@@ -109,6 +109,7 @@ export function useFormSubmission(
 
       // Step 3: Submit the submission
       const submitResponse = await apiClient.submit({
+        intakeId,
         submissionId: newSubmissionId,
         resumeToken,
         idempotencyKey: `finalize_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

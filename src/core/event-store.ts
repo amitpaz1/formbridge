@@ -27,6 +27,10 @@ export interface EventFilters {
   since?: string;
   /** Only events before or on this timestamp (ISO 8601). Inclusive. */
   until?: string;
+  /** Maximum number of events to return. Undefined means no limit. */
+  limit?: number;
+  /** Number of events to skip before returning results. Defaults to 0. */
+  offset?: number;
 }
 
 // =============================================================================
@@ -234,8 +238,8 @@ export class InMemoryEventStore implements EventStore {
       return [...events]; // Return copy to prevent external modification
     }
 
-    // Apply filters
-    return events.filter((event) => {
+    // Apply content filters
+    let filtered = events.filter((event) => {
       // Filter by event types
       if (filters.types && filters.types.length > 0) {
         if (!filters.types.includes(event.type)) {
@@ -260,6 +264,17 @@ export class InMemoryEventStore implements EventStore {
 
       return true;
     });
+
+    // Apply pagination
+    const offset = filters.offset ?? 0;
+    if (offset > 0) {
+      filtered = filtered.slice(offset);
+    }
+    if (filters.limit !== undefined && filters.limit >= 0) {
+      filtered = filtered.slice(0, filters.limit);
+    }
+
+    return filtered;
   }
 
   /**

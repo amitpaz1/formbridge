@@ -456,3 +456,93 @@ The real remaining concerns are:
 3. **No git commit of the merged codebase** — all that code is just staged, one bad `git reset` away from confusion
 
 ---
+
+## Review #9 — 2026-01-30 16:00 IST
+
+**Reviewer:** Brad (automated hourly review)
+**Scope:** Tasks 010–013 progress since last review (~23:05 IST Jan 29)
+**Branch:** `auto-claude/013-event-stream-audit-trail` (HEAD: `ee3baa1e`)
+
+### Progress Since Last Review
+
+4 tasks completed or in-progress since last review:
+
+| Task | Status | PRs |
+|------|--------|-----|
+| 010 – Mixed-mode agent-human collaboration | ✅ PR #1 merged | 15 findings |
+| 011 – File upload negotiation protocol | ✅ PR #2 merged | 13 findings |
+| 012 – Approval gates & review workflow | ✅ PR #3 merged | 24 subtask commits |
+| 013 – Event stream & audit trail | 🔨 In progress | PR #4 open (2 findings) |
+
+### What's Good
+- EventStore abstraction is clean (348 LOC, append-only, dedup, filtering)
+- Triple-write pattern consistent across 8 emission points
+- JSONL export for event streams
+- 2,088 lines of tests for 1,160 lines of source (~1.8:1 ratio)
+
+### Issues Found
+- 🔴 Express vs Hono split — events/submissions use Express, intake/health use Hono
+- 🔴 EventStore is write-only — getEvents() reads submission.events, never the EventStore
+- 🟡 Stale dist/ committed (4-param vs 6-param constructor)
+- 🟡 Triple-write repeated 8x instead of single helper method
+- 🟡 No pagination on event endpoints
+- 🟢 Error response inconsistency between routes and error-handler
+
+---
+
+## Review #10 — 2026-01-30 17:00 IST
+
+**Reviewer:** Brad (automated hourly review)
+**Scope:** Changes since Review #9 (16:00 IST)
+**Branch:** `main` (HEAD: `2f77a2c2`)
+
+### Progress Since Last Review
+
+PR #4 (event stream & audit trail) has been **merged to main**. A fix commit addressed PR review findings and 35 failing tests.
+
+| Commit | Description |
+|--------|-------------|
+| `f292738f` | Fix: address PR review findings + fix all 35 failing tests |
+| `2f77a2c2` | Merge PR #4 into main |
+
+**Main branch: 91 total commits.** All 4 feature PRs (#1–#4) now merged.
+
+### What's Good
+
+- **PR review findings were addressed.** The fix commit directly tackles issues from both the auto-review and my Review #9:
+  - Stale `dist/` removed from version control (now in .gitignore) ✅
+  - Error messages sanitized in events route (no longer leaks submission IDs) ✅  
+  - Generic error handler guards `error.message` in production ✅
+- **New app factory (`src/app.ts`, 371 LOC).** `createFormBridgeApp` and `createFormBridgeAppWithIntakes` factory functions wire up Hono routes, registry, and SubmissionManager. Exported from `src/index.ts`. This is a step toward resolving the Express/Hono split.
+- **Resume token rotation implemented.** `setFields()` now rotates the resume token per spec requirement that every state-changing operation rotates. Integration tests updated to chain rotated tokens.
+- **Idempotency support added.** `InMemorySubmissionStore` now has an idempotency index (`idempotencyKey → submissionId`).
+- **35 test fixes.** Integration tests updated to use the new app factory and handle token rotation across sequential calls.
+
+### Issues Remaining
+
+#### 🟡 Still Open
+
+1. **Express/Hono split persists.** `src/routes/events.ts` and `src/routes/submissions.ts` still import Express types. The new `src/app.ts` uses Hono. The Express routes aren't wired into the Hono app factory — they're only used by `src/test-server.ts` (Express). Two parallel HTTP stacks still coexist.
+
+2. **EventStore still write-only.** `getEvents()` at line 737 still reads from `submission.events`, not the EventStore. The fix commit didn't address this.
+
+3. **Triple-write still repeated.** No `recordEvent()` helper introduced. 8 copy-paste blocks remain.
+
+#### ✅ Resolved Since Review #9
+
+| Issue | Status |
+|-------|--------|
+| 🔴 Stale dist/ committed | ✅ Removed, added to .gitignore |
+| 🟢 Error response leaking details | ✅ Production guard added |
+
+### Summary
+
+Good progress — the PR review feedback loop is working. Auto Claude fixes flagged issues and tests before merging. The codebase is maturing: app factory, token rotation, idempotency. The remaining Express/Hono split and write-only EventStore are architectural debt but not blockers.
+
+**Tasks 010–013 are all merged. Waiting to see what task 014 brings.**
+
+---
+
+*Next review: ~18:00 IST*
+
+---

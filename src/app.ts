@@ -8,6 +8,9 @@
 import { Hono } from 'hono';
 import { createHealthRouter } from './routes/health.js';
 import { createIntakeRouter } from './routes/intake.js';
+import { createHonoSubmissionRouter } from './routes/hono-submissions.js';
+import { createHonoEventRouter } from './routes/hono-events.js';
+import { createHonoApprovalRouter } from './routes/hono-approvals.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 import { createCorsMiddleware, type CorsOptions } from './middleware/cors.js';
 import { IntakeRegistry } from './core/intake-registry.js';
@@ -16,6 +19,7 @@ import {
   SubmissionNotFoundError,
   InvalidResumeTokenError,
 } from './core/submission-manager.js';
+import { ApprovalManager } from './core/approval-manager.js';
 import type { IntakeDefinition } from './types.js';
 import type { Submission } from './types.js';
 import type {
@@ -123,10 +127,16 @@ export function createFormBridgeAppWithIntakes(
   // Intake schema routes
   app.route('/intake', createIntakeRouter(registry));
 
-  // Submission routes
+  // Core services
   const store = new InMemorySubmissionStore();
   const emitter = new NoopEventEmitter();
-  const manager = new SubmissionManager(store, emitter, undefined, 'http://localhost:3000');
+  const manager = new SubmissionManager(store, emitter, registry, 'http://localhost:3000');
+  const approvalManager = new ApprovalManager(store, emitter);
+
+  // Hono route modules
+  app.route('/', createHonoSubmissionRouter(manager));
+  app.route('/', createHonoEventRouter(manager));
+  app.route('/', createHonoApprovalRouter(approvalManager));
 
   // POST /intake/:intakeId/submissions — create submission
   app.post('/intake/:intakeId/submissions', async (c) => {

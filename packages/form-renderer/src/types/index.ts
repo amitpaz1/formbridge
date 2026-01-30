@@ -267,6 +267,7 @@ export interface CreateSubmissionResponse {
  * Submit request
  */
 export interface SubmitRequest {
+  intakeId: string;
   submissionId: string;
   resumeToken: string;
   idempotencyKey: string;

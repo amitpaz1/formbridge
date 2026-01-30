@@ -1,22 +1,27 @@
 /**
  * Test HTTP Server
- * Simple server for testing HTTP endpoints during development
+ * Simple Hono server for testing HTTP endpoints during development
  */
 
-import express from "express";
-import { SubmissionManager } from "./core/submission-manager";
-import { createSubmissionRoutes } from "./routes/submissions";
-import { createEventRoutes } from "./routes/events";
+import { Hono } from "hono";
+import { SubmissionManager } from "./core/submission-manager.js";
+import { ApprovalManager } from "./core/approval-manager.js";
+import { InMemoryEventStore } from "./core/event-store.js";
+import { createHonoSubmissionRouter } from "./routes/hono-submissions.js";
+import { createHonoEventRouter } from "./routes/hono-events.js";
+import { createHonoApprovalRouter } from "./routes/hono-approvals.js";
+import type { Submission } from "./types.js";
+import type { IntakeEvent } from "./types/intake-contract.js";
 
-// Mock store and event emitter for testing
+// Mock store for testing
 class MockStore {
-  private submissions = new Map<string, any>();
+  private submissions = new Map<string, Submission>();
 
   async get(submissionId: string) {
     return this.submissions.get(submissionId) || null;
   }
 
-  async save(submission: any) {
+  async save(submission: Submission) {
     this.submissions.set(submission.id, submission);
   }
 
@@ -31,33 +36,37 @@ class MockStore {
 }
 
 class MockEventEmitter {
-  async emit(event: any) {
+  async emit(event: IntakeEvent) {
     console.log("Event emitted:", event.type);
   }
 }
 
-// Create test server
-const app = express();
-app.use(express.json());
+// Create test app
+const app = new Hono();
 
 const store = new MockStore();
 const eventEmitter = new MockEventEmitter();
-const manager = new SubmissionManager(store, eventEmitter, undefined, "http://localhost:3000");
+const eventStore = new InMemoryEventStore();
+const manager = new SubmissionManager(
+  store,
+  eventEmitter,
+  undefined,
+  "http://localhost:3000",
+  undefined,
+  eventStore
+);
+const approvalManager = new ApprovalManager(store, eventEmitter);
 
-// Setup routes
-const routes = createSubmissionRoutes(manager);
-app.post("/submissions/:id/handoff", routes.generateHandoff);
-
-const eventRoutes = createEventRoutes(manager);
-app.get("/submissions/:id/events", eventRoutes.getEvents);
+// Mount routes
+app.route("/", createHonoSubmissionRouter(manager));
+app.route("/", createHonoEventRouter(manager));
+app.route("/", createHonoApprovalRouter(approvalManager));
 
 // Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "ok" });
-});
+app.get("/health", (c) => c.json({ status: "ok" }));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Test server running on http://localhost:${PORT}`);
-  console.log(`Test endpoint: POST http://localhost:${PORT}/submissions/sub_test/handoff`);
-});
+console.log(`Test server configured for http://localhost:${PORT}`);
+console.log(`Test endpoint: POST http://localhost:${PORT}/submissions/sub_test/handoff`);
+
+export default app;

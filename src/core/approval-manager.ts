@@ -10,6 +10,7 @@ import type {
   SubmissionState,
 } from "../types/intake-contract";
 import type { Submission } from "../types";
+import { assertValidTransition } from "./state-machine.js";
 import { randomUUID } from "crypto";
 
 export class SubmissionNotFoundError extends Error {
@@ -181,6 +182,7 @@ export class ApprovalManager {
     };
 
     // Update submission state
+    assertValidTransition(submission.state, "approved");
     submission.state = "approved";
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
@@ -262,6 +264,7 @@ export class ApprovalManager {
     };
 
     // Update submission state
+    assertValidTransition(submission.state, "rejected");
     submission.state = "rejected";
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
@@ -344,6 +347,7 @@ export class ApprovalManager {
     };
 
     // Update submission state back to draft
+    assertValidTransition(submission.state, "draft");
     submission.state = "draft";
     submission.updatedAt = now;
     submission.updatedBy = request.actor;

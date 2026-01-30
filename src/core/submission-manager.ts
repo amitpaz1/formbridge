@@ -17,8 +17,8 @@ import type { Submission, FieldAttribution } from "../types";
 import type { StorageBackend } from "../storage/storage-backend.js";
 import type { UploadStatus } from "./validator.js";
 import type { EventStore } from "./event-store.js";
-import { Validator } from "../validation/validator.js";
 import { InMemoryEventStore } from "./event-store.js";
+import { assertValidTransition } from "./state-machine.js";
 import { randomUUID } from "crypto";
 
 export class SubmissionNotFoundError extends Error {
@@ -111,7 +111,6 @@ export interface ConfirmUploadOutput {
  * with field-level actor attribution for audit trails
  */
 export class SubmissionManager {
-  private _validator: Validator;
   private eventStore: EventStore;
 
   constructor(
@@ -122,10 +121,25 @@ export class SubmissionManager {
     private storageBackend?: StorageBackend,
     eventStore?: EventStore
   ) {
-    // Initialize validator with event emitter for audit trail
-    this._validator = new Validator(_eventEmitter);
     // Initialize event store (defaults to in-memory implementation)
     this.eventStore = eventStore ?? new InMemoryEventStore();
+  }
+
+  /**
+   * Record an event using the triple-write pattern:
+   * 1. Append to submission.events array (in-memory)
+   * 2. Emit via event emitter (for listeners)
+   * 3. Append to persistent event store (for queries)
+   * 4. Save submission to store
+   */
+  private async recordEvent(
+    submission: Submission,
+    event: IntakeEvent
+  ): Promise<void> {
+    submission.events.push(event);
+    await this._eventEmitter.emit(event);
+    await this.eventStore.appendEvent(event);
+    await this.store.save(submission);
   }
 
   /**
@@ -187,11 +201,7 @@ export class SubmissionManager {
       },
     };
 
-    // Triple-write pattern: array + emit + store
-    submission.events.push(event);
-    await this._eventEmitter.emit(event);
-    await this.eventStore.appendEvent(event);
-    await this.store.save(submission);
+    await this.recordEvent(submission, event);
 
     return {
       ok: true,
@@ -285,6 +295,7 @@ export class SubmissionManager {
 
     // Update state if still in draft
     if (submission.state === "draft") {
+      assertValidTransition(submission.state, "in_progress");
       submission.state = "in_progress";
     }
 
@@ -306,13 +317,8 @@ export class SubmissionManager {
         },
       };
 
-      // Triple-write pattern: array + emit + store
-      submission.events.push(event);
-      await this._eventEmitter.emit(event);
-      await this.eventStore.appendEvent(event);
+      await this.recordEvent(submission, event);
     }
-
-    await this.store.save(submission);
 
     return {
       ok: true,
@@ -400,6 +406,7 @@ export class SubmissionManager {
 
     // Update state to awaiting_upload if currently in draft or in_progress
     if (submission.state === "draft" || submission.state === "in_progress") {
+      assertValidTransition(submission.state, "awaiting_upload");
       submission.state = "awaiting_upload";
     }
 
@@ -425,11 +432,7 @@ export class SubmissionManager {
       },
     };
 
-    // Triple-write pattern: array + emit + store
-    submission.events.push(event);
-    await this._eventEmitter.emit(event);
-    await this.eventStore.appendEvent(event);
-    await this.store.save(submission);
+    await this.recordEvent(submission, event);
 
     // Calculate expiration in milliseconds
     const expiresInMs = new Date(signedUrl.expiresAt).getTime() - Date.now();
@@ -513,6 +516,7 @@ export class SubmissionManager {
 
       // If no more pending uploads, transition back to in_progress
       if (!hasPendingUploads && submission.state === "awaiting_upload") {
+        assertValidTransition(submission.state, "in_progress");
         submission.state = "in_progress";
       }
 
@@ -538,11 +542,7 @@ export class SubmissionManager {
         },
       };
 
-      // Triple-write pattern: array + emit + store
-      submission.events.push(event);
-      await this._eventEmitter.emit(event);
-      await this.eventStore.appendEvent(event);
-      await this.store.save(submission);
+      await this.recordEvent(submission, event);
 
       return {
         ok: true,
@@ -569,11 +569,7 @@ export class SubmissionManager {
         },
       };
 
-      // Triple-write pattern: array + emit + store
-      submission.events.push(event);
-      await this._eventEmitter.emit(event);
-      await this.eventStore.appendEvent(event);
-      await this.store.save(submission);
+      await this.recordEvent(submission, event);
 
       throw new Error(
         `Upload verification failed: ${verificationResult.error ?? "Unknown error"}`
@@ -633,6 +629,7 @@ export class SubmissionManager {
 
     // If approval is required, transition to needs_review and return needs_approval error
     if (requiresApproval) {
+      assertValidTransition(submission.state, "needs_review");
       submission.state = "needs_review";
       submission.updatedAt = now;
       submission.updatedBy = request.actor;
@@ -652,9 +649,7 @@ export class SubmissionManager {
         },
       };
 
-      submission.events.push(reviewEvent);
-      await this._eventEmitter.emit(reviewEvent);
-      await this.store.save(submission);
+      await this.recordEvent(submission, reviewEvent);
 
       // Return needs_approval error with next action guidance
       const error: IntakeError = {
@@ -679,6 +674,7 @@ export class SubmissionManager {
     }
 
     // Normal submission flow - no approval required
+    assertValidTransition(submission.state, "submitted");
     submission.state = "submitted";
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
@@ -698,11 +694,7 @@ export class SubmissionManager {
       },
     };
 
-    // Triple-write pattern: array + emit + store
-    submission.events.push(event);
-    await this._eventEmitter.emit(event);
-    await this.eventStore.appendEvent(event);
-    await this.store.save(submission);
+    await this.recordEvent(submission, event);
 
     return {
       ok: true,
@@ -732,14 +724,17 @@ export class SubmissionManager {
 
   /**
    * Get events for a submission
-   * Returns the full event stream for audit trail purposes
+   * Returns the event stream from the EventStore for audit trail purposes
    */
-  async getEvents(submissionId: string): Promise<IntakeEvent[]> {
+  async getEvents(
+    submissionId: string,
+    filters?: import("./event-store.js").EventFilters
+  ): Promise<IntakeEvent[]> {
     const submission = await this.store.get(submissionId);
     if (!submission) {
       throw new SubmissionNotFoundError(submissionId);
     }
-    return submission.events;
+    return this.eventStore.getEvents(submissionId, filters);
   }
 
   /**
@@ -775,11 +770,7 @@ export class SubmissionManager {
       },
     };
 
-    // Triple-write pattern: array + emit + store
-    submission.events.push(event);
-    await this._eventEmitter.emit(event);
-    await this.eventStore.appendEvent(event);
-    await this.store.save(submission);
+    await this.recordEvent(submission, event);
 
     return resumeUrl;
   }
@@ -818,11 +809,7 @@ export class SubmissionManager {
       },
     };
 
-    // Triple-write pattern: array + emit + store
-    submission.events.push(event);
-    await this._eventEmitter.emit(event);
-    await this.eventStore.appendEvent(event);
-    await this.store.save(submission);
+    await this.recordEvent(submission, event);
 
     return event.eventId;
   }

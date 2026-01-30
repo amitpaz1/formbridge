@@ -119,6 +119,17 @@ export type { FormBridgeAppOptions } from './app.js';
 // =============================================================================
 
 export { createIntakeRouter } from './routes/intake.js';
-export { createSubmissionRouter } from './routes/submissions.js';
+export { createHonoSubmissionRouter } from './routes/hono-submissions.js';
+export { createHonoEventRouter } from './routes/hono-events.js';
+export { createHonoApprovalRouter } from './routes/hono-approvals.js';
 export { createUploadRouter } from './routes/uploads.js';
-export { createEventRouter } from './routes/events.js';
+
+// =============================================================================
+// Core Business Logic
+// =============================================================================
+
+export { SubmissionManager } from './core/submission-manager.js';
+export { ApprovalManager } from './core/approval-manager.js';
+export { InMemoryEventStore } from './core/event-store.js';
+export type { EventStore, EventFilters } from './core/event-store.js';
+export { assertValidTransition, InvalidStateTransitionError, VALID_TRANSITIONS } from './core/state-machine.js';

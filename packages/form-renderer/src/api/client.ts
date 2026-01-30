@@ -3,7 +3,13 @@
  * Handles communication with the backend API including event emission
  */
 
-import type { Actor } from '../types';
+import type {
+  Actor,
+  CreateSubmissionRequest,
+  CreateSubmissionResponse,
+  SubmitRequest,
+  SubmitResponse,
+} from '../types';
 
 /**
  * Field-level comment for request_changes action
@@ -202,7 +208,7 @@ export class FormBridgeApiClient {
     comment?: string
   ): Promise<ApprovalResponse> {
     try {
-      const url = `${this.endpoint}/api/submissions/${encodeURIComponent(submissionId)}/approve`;
+      const url = `${this.endpoint}/submissions/${encodeURIComponent(submissionId)}/approve`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -266,7 +272,7 @@ export class FormBridgeApiClient {
     comment?: string
   ): Promise<ApprovalResponse> {
     try {
-      const url = `${this.endpoint}/api/submissions/${encodeURIComponent(submissionId)}/reject`;
+      const url = `${this.endpoint}/submissions/${encodeURIComponent(submissionId)}/reject`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -333,7 +339,7 @@ export class FormBridgeApiClient {
     comment?: string
   ): Promise<ApprovalResponse> {
     try {
-      const url = `${this.endpoint}/api/submissions/${encodeURIComponent(submissionId)}/request-changes`;
+      const url = `${this.endpoint}/submissions/${encodeURIComponent(submissionId)}/request-changes`;
 
       const response = await fetch(url, {
         method: 'POST',
@@ -360,6 +366,104 @@ export class FormBridgeApiClient {
       return {
         ok: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  /**
+   * Create a new submission
+   *
+   * @param request - Create submission request
+   * @returns Create submission response or error
+   */
+  async createSubmission(
+    request: CreateSubmissionRequest
+  ): Promise<CreateSubmissionResponse | { ok: false; error: { message: string; retryable: boolean; fields?: Record<string, string> } }> {
+    try {
+      const url = `${this.endpoint}/intake/${encodeURIComponent(request.intakeId)}/submissions`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify({
+          actor: request.actor,
+          initialFields: request.initialFields,
+          idempotencyKey: request.idempotencyKey,
+          ttlMs: request.ttlMs,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          ok: false as const,
+          error: {
+            message: data.error?.message || `HTTP ${response.status}: ${response.statusText}`,
+            retryable: response.status >= 500,
+          },
+        };
+      }
+
+      return data as CreateSubmissionResponse;
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: {
+          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          retryable: true,
+        },
+      };
+    }
+  }
+
+  /**
+   * Submit a submission for processing
+   *
+   * @param request - Submit request
+   * @returns Submit response or error
+   */
+  async submit(
+    request: SubmitRequest
+  ): Promise<SubmitResponse | { ok: false; error: { message: string; retryable: boolean; fields?: Record<string, string> } }> {
+    try {
+      const url = `${this.endpoint}/intake/${encodeURIComponent(request.intakeId)}/submissions/${encodeURIComponent(request.submissionId)}/submit`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify({
+          resumeToken: request.resumeToken,
+          actor: request.actor,
+          idempotencyKey: request.idempotencyKey,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok && response.status !== 202) {
+        return {
+          ok: false as const,
+          error: {
+            message: data.error?.message || `HTTP ${response.status}: ${response.statusText}`,
+            retryable: response.status >= 500,
+          },
+        };
+      }
+
+      // 202 means needs_approval — still return the response
+      if (response.status === 202) {
+        return data;
+      }
+
+      return data as SubmitResponse;
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: {
+          message: error instanceof Error ? error.message : 'Unknown error occurred',
+          retryable: true,
+        },
       };
     }
   }
