@@ -1,37 +1,283 @@
 /**
  * FormBridge MCP Tool Generator
  *
- * This module generates MCP tool definitions from IntakeDefinition schemas.
- * Each intake form is exposed as a set of 6 MCP tools that agents can use
- * to submit structured data through the Intake Contract protocol.
- *
- * Generated tools:
- * - {intakeId}_create: Create a new submission session
- * - {intakeId}_set: Set/update field values in an existing submission
- * - {intakeId}_validate: Validate current submission state without submitting
- * - {intakeId}_submit: Submit the intake form
- * - {intakeId}_requestUpload: Request a signed URL for file upload
- * - {intakeId}_confirmUpload: Confirm completion of a file upload
+ * This module provides two tool registration approaches:
+ * 1. MCP SDK tools (registerTools): Registers handoffToHuman, requestUpload,
+ *    and confirmUpload tools using the MCP SDK server pattern.
+ * 2. Intake-based tools (generateToolsFromIntake): Generates MCP tool definitions
+ *    from IntakeDefinition schemas for create, set, validate, submit,
+ *    requestUpload, and confirmUpload operations.
  */
 
-import { convertZodToJsonSchema, type JsonSchema } from '../schemas/json-schema-converter.js';
-import type { IntakeDefinition } from '../schemas/intake-schema.js';
-import type { MCPToolDefinition } from '../types/mcp-types.js';
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+import type { SubmissionManager } from "../core/submission-manager.js";
+import type { Actor, IntakeDefinition } from "../types/intake-contract.js";
+import type { MCPToolDefinition } from "../types/mcp-types.js";
+import type { JsonSchema } from "../schemas/json-schema-converter.js";
+import { convertZodToJsonSchema } from "../schemas/json-schema-converter.js";
+
+// =============================================================================
+// § MCP SDK Tool Registration
+// =============================================================================
 
 /**
  * Tool generation options
  */
 export interface ToolGenerationOptions {
-  /** Whether to include optional fields in tool descriptions */
+  /** Include optional fields in tool descriptions (default: true) */
   includeOptionalFields?: boolean;
-  /** Whether to include field constraints in tool descriptions */
+  /** Include constraint details in tool descriptions (default: true) */
   includeConstraints?: boolean;
-  /** Maximum number of fields to list in description (defaults to 10) */
+  /** Maximum number of fields to list in tool description (default: 10) */
   maxFieldsInDescription?: number;
 }
 
 /**
- * Generated tools result
+ * Register all MCP tools for FormBridge
+ */
+export function registerTools(
+  server: McpServer,
+  submissionManager: SubmissionManager
+): void {
+  /**
+   * handoffToHuman - Generate a resume URL for agent-to-human collaboration
+   *
+   * Allows an agent to hand off a partially completed submission to a human
+   * by generating a shareable resume URL with the resumeToken embedded.
+   */
+  server.tool(
+    "handoffToHuman",
+    "Generate a shareable resume URL for agent-to-human handoff. Returns a URL that a human can open to complete the submission.",
+    {
+      submissionId: z.string().describe("The submission ID to generate a handoff URL for"),
+      actor: z.object({
+        kind: z.enum(["agent", "human", "system"]).describe("Type of actor requesting the handoff"),
+        id: z.string().describe("Unique identifier for the actor"),
+        name: z.string().optional().describe("Display name of the actor"),
+        metadata: z.record(z.unknown()).optional().describe("Additional actor metadata"),
+      }).optional().describe("Actor requesting the handoff (defaults to system actor)"),
+    },
+    async ({ submissionId, actor }) => {
+      try {
+        // Default to system actor if not provided
+        const handoffActor: Actor = actor || {
+          kind: "system",
+          id: "mcp-server",
+          name: "MCP Server",
+        };
+
+        // Generate the handoff URL
+        const resumeUrl = await submissionManager.generateHandoffUrl(
+          submissionId,
+          handoffActor
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: true,
+                submissionId,
+                resumeUrl,
+                message: "Handoff URL generated successfully. Share this URL with a human to complete the submission.",
+              }, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: false,
+                submissionId,
+                error: errorMessage,
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  /**
+   * requestUpload - Request a signed URL for file upload
+   *
+   * Initiates a file upload by requesting a signed URL from the storage backend.
+   * The agent provides file metadata and receives a URL to upload the file to.
+   */
+  server.tool(
+    "requestUpload",
+    "Request a signed URL to upload a file for a submission. Provide file metadata (field name, filename, MIME type, size) and receive a signed URL with upload constraints.",
+    {
+      submissionId: z.string().describe("The submission ID to upload a file for"),
+      resumeToken: z.string().describe("Resume token from previous create or set call"),
+      field: z.string().describe("Dot-path to the file field (e.g., 'documents.w9_form')"),
+      filename: z.string().describe("Name of the file to upload"),
+      mimeType: z.string().describe("MIME type of the file (e.g., 'application/pdf', 'image/jpeg')"),
+      sizeBytes: z.number().describe("Size of the file in bytes"),
+      intakeId: z.string().describe("The intake definition ID for schema validation"),
+      actor: z.object({
+        kind: z.enum(["agent", "human", "system"]).describe("Type of actor"),
+        id: z.string().describe("Unique identifier for the actor"),
+        name: z.string().optional().describe("Display name of the actor"),
+        metadata: z.record(z.unknown()).optional().describe("Additional actor metadata"),
+      }).optional().describe("Actor requesting the upload (defaults to system actor)"),
+    },
+    async ({ submissionId, resumeToken, field, filename, mimeType, sizeBytes, intakeId, actor }) => {
+      try {
+        const uploadActor: Actor = actor || {
+          kind: "system",
+          id: "mcp-server",
+          name: "MCP Server",
+        };
+
+        // Construct a minimal IntakeDefinition for validation
+        const intakeDefinition: IntakeDefinition = {
+          id: intakeId,
+          version: "1.0.0",
+          name: intakeId,
+          schema: {},
+          destination: { kind: "webhook" },
+        };
+
+        const result = await submissionManager.requestUpload(
+          {
+            submissionId,
+            resumeToken,
+            field,
+            filename,
+            mimeType,
+            sizeBytes,
+            actor: uploadActor,
+          },
+          intakeDefinition
+        );
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: false,
+                submissionId,
+                error: errorMessage,
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  /**
+   * confirmUpload - Confirm completion of a file upload
+   *
+   * After uploading a file to the signed URL, call this to verify the upload
+   * and update the submission state.
+   */
+  server.tool(
+    "confirmUpload",
+    "Confirm completion of a file upload. Call this after successfully uploading a file to the signed URL received from requestUpload. The system will verify the upload and update the submission status.",
+    {
+      submissionId: z.string().describe("The submission ID"),
+      resumeToken: z.string().describe("Resume token from previous requestUpload call"),
+      uploadId: z.string().describe("Upload ID returned from requestUpload"),
+      actor: z.object({
+        kind: z.enum(["agent", "human", "system"]).describe("Type of actor"),
+        id: z.string().describe("Unique identifier for the actor"),
+        name: z.string().optional().describe("Display name of the actor"),
+        metadata: z.record(z.unknown()).optional().describe("Additional actor metadata"),
+      }).optional().describe("Actor confirming the upload (defaults to system actor)"),
+    },
+    async ({ submissionId, resumeToken, uploadId, actor }) => {
+      try {
+        const confirmActor: Actor = actor || {
+          kind: "system",
+          id: "mcp-server",
+          name: "MCP Server",
+        };
+
+        const result = await submissionManager.confirmUpload({
+          submissionId,
+          resumeToken,
+          uploadId,
+          actor: confirmActor,
+        });
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(result, null, 2),
+            },
+          ],
+        };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                ok: false,
+                submissionId,
+                error: errorMessage,
+              }, null, 2),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+}
+
+/**
+ * Create and configure an MCP server with FormBridge tools
+ */
+export function createMcpServer(
+  submissionManager: SubmissionManager,
+  options?: {
+    name?: string;
+    version?: string;
+  }
+): McpServer {
+  const server = new McpServer({
+    name: options?.name || "@formbridge/mcp-server",
+    version: options?.version || "0.1.0",
+  });
+
+  registerTools(server, submissionManager);
+
+  return server;
+}
+
+// =============================================================================
+// § Intake-Based Tool Generation (legacy pattern)
+// =============================================================================
+
+/**
+ * Generated tool definitions from an IntakeDefinition
  */
 export interface GeneratedTools {
   /** Create tool definition */
@@ -97,7 +343,7 @@ export function generateToolsFromIntake(
     includeSchemaProperty: false
   });
 
-  // Extract field information for descriptions
+  // Extract field information
   const fieldDescriptions = extractFieldDescriptions(jsonSchema);
   const requiredFields = jsonSchema.required || [];
   const allFields = Object.keys(jsonSchema.properties || {});
@@ -160,16 +406,6 @@ export function generateToolsFromIntake(
  *
  * The create tool initializes a new submission session. It accepts optional
  * initial data for any fields in the intake schema.
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @param jsonSchema - JSON Schema representation of the intake schema
- * @param fieldDescriptions - Map of field names to their descriptions
- * @param requiredFields - Array of required field names
- * @param allFields - Array of all field names
- * @param options - Tool generation options
- * @returns MCP tool definition for the create operation
  */
 function generateCreateTool(
   toolPrefix: string,
@@ -222,15 +458,6 @@ function generateCreateTool(
  *
  * The set tool updates field values in an existing submission session.
  * It requires a resumeToken and accepts partial data updates.
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @param jsonSchema - JSON Schema representation of the intake schema
- * @param fieldDescriptions - Map of field names to their descriptions
- * @param allFields - Array of all field names
- * @param options - Tool generation options
- * @returns MCP tool definition for the set operation
  */
 function generateSetTool(
   toolPrefix: string,
@@ -283,11 +510,6 @@ function generateSetTool(
  *
  * The validate tool checks the current submission state without submitting.
  * It returns validation errors following the Intake Contract error taxonomy.
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @returns MCP tool definition for the validate operation
  */
 function generateValidateTool(
   toolPrefix: string,
@@ -322,12 +544,6 @@ function generateValidateTool(
  *
  * The submit tool finalizes and submits the intake form. It validates
  * all required fields and delivers the submission to the configured destination.
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @param requiredFields - Array of required field names
- * @returns MCP tool definition for the submit operation
  */
 function generateSubmitTool(
   toolPrefix: string,
@@ -366,11 +582,6 @@ function generateSubmitTool(
  *
  * The requestUpload tool initiates a file upload by requesting a signed URL.
  * It requires a resumeToken and file metadata (field, filename, mimeType, sizeBytes).
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @returns MCP tool definition for the requestUpload operation
  */
 function generateRequestUploadTool(
   toolPrefix: string,
@@ -421,11 +632,6 @@ function generateRequestUploadTool(
  *
  * The confirmUpload tool confirms completion of a file upload.
  * It requires a resumeToken and the uploadId returned from requestUpload.
- *
- * @param toolPrefix - The intake ID used as tool name prefix
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @returns MCP tool definition for the confirmUpload operation
  */
 function generateConfirmUploadTool(
   toolPrefix: string,
@@ -461,15 +667,6 @@ function generateConfirmUploadTool(
 
 /**
  * Generates a descriptive tool description including field information
- *
- * @param operation - The tool operation type (create or set)
- * @param intakeName - Human-readable name of the intake form
- * @param intakeDescription - Optional description of the intake form
- * @param fieldDescriptions - Map of field names to their descriptions
- * @param requiredFields - Array of required field names
- * @param allFields - Array of all field names
- * @param options - Tool generation options
- * @returns Formatted tool description string
  */
 function generateToolDescription(
   operation: 'create' | 'set',
@@ -520,9 +717,6 @@ function generateToolDescription(
 
 /**
  * Extracts field descriptions from a JSON Schema
- *
- * @param jsonSchema - The JSON Schema to extract descriptions from
- * @returns Map of field names to their description strings
  */
 function extractFieldDescriptions(jsonSchema: JsonSchema): Record<string, string> {
   const descriptions: Record<string, string> = {};
