@@ -108,6 +108,13 @@ export type {
 } from './mcp/tool-generator.js';
 
 // =============================================================================
+// App Factory
+// =============================================================================
+
+export { createFormBridgeApp, createFormBridgeAppWithIntakes } from './app.js';
+export type { FormBridgeAppOptions } from './app.js';
+
+// =============================================================================
 // HTTP Route Utilities (Advanced Usage)
 // =============================================================================
 
