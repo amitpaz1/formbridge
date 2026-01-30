@@ -7,6 +7,14 @@
  */
 
 import { z } from 'zod';
+import type { IntakeEvent } from '../types/intake-contract';
+
+/**
+ * Event emitter interface for validation events
+ */
+export interface EventEmitter {
+  emit(event: IntakeEvent): Promise<void>;
+}
 
 /**
  * Validation result for successful validation
@@ -194,4 +202,66 @@ export function validatePartialSubmission<T = any>(
   // For non-object schemas, just validate as-is
   // This handles primitives, arrays, etc.
   return validateSubmission(schema as z.ZodType<Partial<T>>, data);
+}
+
+/**
+ * Validator class with event emission capabilities
+ *
+ * This class provides validation methods that emit validation events
+ * for audit trail purposes. It follows the same pattern as SubmissionManager
+ * by accepting an EventEmitter in the constructor.
+ */
+export class Validator {
+  constructor(private eventEmitter: EventEmitter) {}
+
+  /**
+   * Protected method to emit validation events
+   * Used internally by validation methods to emit audit trail events
+   */
+  protected async emitEvent(event: IntakeEvent): Promise<void> {
+    await this.eventEmitter.emit(event);
+  }
+
+  /**
+   * Validates submission data against a Zod schema
+   *
+   * @param schema - The Zod schema to validate against
+   * @param data - The submission data to validate
+   * @returns Validation result with success status and either data or error
+   */
+  validateSubmission<T = any>(
+    schema: z.ZodType<T>,
+    data: unknown
+  ): ValidationResult<T> {
+    return validateSubmission(schema, data);
+  }
+
+  /**
+   * Validates submission data and returns only the data or throws on error
+   *
+   * @param schema - The Zod schema to validate against
+   * @param data - The submission data to validate
+   * @returns The validated and parsed data
+   * @throws {z.ZodError} If validation fails
+   */
+  validateSubmissionOrThrow<T = any>(
+    schema: z.ZodType<T>,
+    data: unknown
+  ): T {
+    return validateSubmissionOrThrow(schema, data);
+  }
+
+  /**
+   * Validates partial submission data against a Zod schema
+   *
+   * @param schema - The Zod schema to validate against
+   * @param data - The partial submission data to validate
+   * @returns Validation result with success status and either data or error
+   */
+  validatePartialSubmission<T = any>(
+    schema: z.ZodType<T>,
+    data: unknown
+  ): ValidationResult<Partial<T>> {
+    return validatePartialSubmission(schema, data);
+  }
 }
