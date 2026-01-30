@@ -76,7 +76,7 @@ describe('Validator with Event Emission', () => {
       expect(event.payload).toEqual({ data });
     });
 
-    it('should not emit event on validation failure', async () => {
+    it('should emit validation.failed event on validation failure', async () => {
       const schema = z.object({
         email: z.string().email(),
       });
@@ -96,8 +96,20 @@ describe('Validator with Event Emission', () => {
       // Verify validation failed
       expect(result.success).toBe(false);
 
-      // Verify no event was emitted
-      expect(eventEmitter.events).toHaveLength(0);
+      // Verify validation.failed event was emitted
+      expect(eventEmitter.events).toHaveLength(1);
+
+      const event = eventEmitter.events[0];
+      expect(event.type).toBe('validation.failed');
+      expect(event.submissionId).toBe(submissionId);
+      expect(event.actor).toEqual(agentActor);
+      expect(event.state).toBe(state);
+      expect(event.eventId).toMatch(/^evt_/);
+      expect(event.ts).toBeDefined();
+      expect(event.payload).toBeDefined();
+      expect(event.payload?.errors).toBeDefined();
+      expect(Array.isArray(event.payload?.errors)).toBe(true);
+      expect(event.payload?.errors.length).toBeGreaterThan(0);
     });
   });
 
@@ -127,7 +139,7 @@ describe('Validator with Event Emission', () => {
       expect(event.payload).toEqual({ data });
     });
 
-    it('should throw and not emit event on validation failure', async () => {
+    it('should emit validation.failed event and throw on validation failure', async () => {
       const schema = z.object({
         age: z.number().min(18),
       });
@@ -144,8 +156,20 @@ describe('Validator with Event Emission', () => {
         )
       ).rejects.toThrow();
 
-      // Verify no event was emitted
-      expect(eventEmitter.events).toHaveLength(0);
+      // Verify validation.failed event was emitted
+      expect(eventEmitter.events).toHaveLength(1);
+
+      const event = eventEmitter.events[0];
+      expect(event.type).toBe('validation.failed');
+      expect(event.submissionId).toBe(submissionId);
+      expect(event.actor).toEqual(agentActor);
+      expect(event.state).toBe(state);
+      expect(event.eventId).toMatch(/^evt_/);
+      expect(event.ts).toBeDefined();
+      expect(event.payload).toBeDefined();
+      expect(event.payload?.errors).toBeDefined();
+      expect(Array.isArray(event.payload?.errors)).toBe(true);
+      expect(event.payload?.errors.length).toBeGreaterThan(0);
     });
   });
 
@@ -180,7 +204,7 @@ describe('Validator with Event Emission', () => {
       expect(event.payload).toEqual({ data: partialData });
     });
 
-    it('should not emit event on partial validation failure', async () => {
+    it('should emit validation.failed event on partial validation failure', async () => {
       const schema = z.object({
         email: z.string().email(),
       });
@@ -198,8 +222,20 @@ describe('Validator with Event Emission', () => {
       // Verify validation failed
       expect(result.success).toBe(false);
 
-      // Verify no event was emitted
-      expect(eventEmitter.events).toHaveLength(0);
+      // Verify validation.failed event was emitted
+      expect(eventEmitter.events).toHaveLength(1);
+
+      const event = eventEmitter.events[0];
+      expect(event.type).toBe('validation.failed');
+      expect(event.submissionId).toBe(submissionId);
+      expect(event.actor).toEqual(agentActor);
+      expect(event.state).toBe(state);
+      expect(event.eventId).toMatch(/^evt_/);
+      expect(event.ts).toBeDefined();
+      expect(event.payload).toBeDefined();
+      expect(event.payload?.errors).toBeDefined();
+      expect(Array.isArray(event.payload?.errors)).toBe(true);
+      expect(event.payload?.errors.length).toBeGreaterThan(0);
     });
   });
 });
