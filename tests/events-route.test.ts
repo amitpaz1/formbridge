@@ -470,5 +470,165 @@ describe('Events Route', () => {
         expect(event.actor.kind).toBe('agent');
       });
     });
+
+    it('should return 400 for invalid event type', async () => {
+      // Create a submission
+      const createResponse = await manager.createSubmission({
+        intakeId: 'intake_test',
+        actor: agentActor,
+        initialFields: {
+          name: 'Test',
+        },
+      });
+
+      const submissionId = createResponse.submissionId;
+
+      // Request with invalid event type
+      const req = {
+        params: { id: submissionId },
+        query: { type: 'invalid.event.type' },
+      } as any;
+
+      let responseData: any;
+      let responseStatus: number = 0;
+
+      const res = {
+        status(code: number) {
+          responseStatus = code;
+          return this;
+        },
+        json(data: any) {
+          responseData = data;
+          return this;
+        },
+      } as any;
+
+      const next = () => {};
+
+      await routes.getEvents(req, res, next);
+
+      expect(responseStatus).toBe(400);
+      expect(responseData.error).toContain('Invalid');
+    });
+
+    it('should return 400 for invalid actorKind', async () => {
+      // Create a submission
+      const createResponse = await manager.createSubmission({
+        intakeId: 'intake_test',
+        actor: agentActor,
+        initialFields: {
+          name: 'Test',
+        },
+      });
+
+      const submissionId = createResponse.submissionId;
+
+      // Request with invalid actorKind
+      const req = {
+        params: { id: submissionId },
+        query: { actorKind: 'invalid' },
+      } as any;
+
+      let responseData: any;
+      let responseStatus: number = 0;
+
+      const res = {
+        status(code: number) {
+          responseStatus = code;
+          return this;
+        },
+        json(data: any) {
+          responseData = data;
+          return this;
+        },
+      } as any;
+
+      const next = () => {};
+
+      await routes.getEvents(req, res, next);
+
+      expect(responseStatus).toBe(400);
+      expect(responseData.error).toContain('Invalid');
+    });
+
+    it('should return 400 for invalid timestamp', async () => {
+      // Create a submission
+      const createResponse = await manager.createSubmission({
+        intakeId: 'intake_test',
+        actor: agentActor,
+        initialFields: {
+          name: 'Test',
+        },
+      });
+
+      const submissionId = createResponse.submissionId;
+
+      // Request with invalid timestamp
+      const req = {
+        params: { id: submissionId },
+        query: { since: 'not-a-valid-timestamp' },
+      } as any;
+
+      let responseData: any;
+      let responseStatus: number = 0;
+
+      const res = {
+        status(code: number) {
+          responseStatus = code;
+          return this;
+        },
+        json(data: any) {
+          responseData = data;
+          return this;
+        },
+      } as any;
+
+      const next = () => {};
+
+      await routes.getEvents(req, res, next);
+
+      expect(responseStatus).toBe(400);
+      expect(responseData.error).toContain('Invalid');
+    });
+
+    it('should return 400 for unexpected query parameters', async () => {
+      // Create a submission
+      const createResponse = await manager.createSubmission({
+        intakeId: 'intake_test',
+        actor: agentActor,
+        initialFields: {
+          name: 'Test',
+        },
+      });
+
+      const submissionId = createResponse.submissionId;
+
+      // Request with unexpected query parameter
+      const req = {
+        params: { id: submissionId },
+        query: { unexpectedParam: 'value' },
+      } as any;
+
+      let responseData: any;
+      let responseStatus: number = 0;
+
+      const res = {
+        status(code: number) {
+          responseStatus = code;
+          return this;
+        },
+        json(data: any) {
+          responseData = data;
+          return this;
+        },
+      } as any;
+
+      const next = () => {};
+
+      await routes.getEvents(req, res, next);
+
+      expect(responseStatus).toBe(400);
+      expect(responseData.error).toContain('Invalid');
+    });
   });
 });

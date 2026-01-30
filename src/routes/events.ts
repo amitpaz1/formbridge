@@ -7,6 +7,80 @@ import type { Request, Response, NextFunction } from "express";
 import type { SubmissionManager } from "../core/submission-manager";
 import { SubmissionNotFoundError } from "../core/submission-manager";
 import type { IntakeEvent, IntakeEventType } from "../types/intake-contract";
+import { z } from "zod";
+
+/**
+ * Valid event types for filtering
+ */
+const eventTypeEnum = z.enum([
+  "submission.created",
+  "field.updated",
+  "validation.passed",
+  "validation.failed",
+  "upload.requested",
+  "upload.completed",
+  "upload.failed",
+  "submission.submitted",
+  "review.requested",
+  "review.approved",
+  "review.rejected",
+  "delivery.attempted",
+  "delivery.succeeded",
+  "delivery.failed",
+  "submission.finalized",
+  "submission.cancelled",
+  "submission.expired",
+  "handoff.link_issued",
+  "handoff.resumed",
+]);
+
+/**
+ * Query parameter validation schema
+ */
+const queryParamsSchema = z
+  .object({
+    type: z
+      .string()
+      .optional()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          const types = val.split(",");
+          return types.every((t) => eventTypeEnum.safeParse(t).success);
+        },
+        {
+          message: "Invalid event type",
+        }
+      ),
+    actorKind: z.enum(["agent", "human", "system"]).optional(),
+    since: z
+      .string()
+      .optional()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          const date = new Date(val);
+          return !isNaN(date.getTime());
+        },
+        {
+          message: "Invalid ISO 8601 timestamp for 'since'",
+        }
+      ),
+    until: z
+      .string()
+      .optional()
+      .refine(
+        (val) => {
+          if (!val) return true;
+          const date = new Date(val);
+          return !isNaN(date.getTime());
+        },
+        {
+          message: "Invalid ISO 8601 timestamp for 'until'",
+        }
+      ),
+  })
+  .strict();
 
 /**
  * Event filter options parsed from query parameters
@@ -16,6 +90,43 @@ interface EventFilterOptions {
   actorKind?: "agent" | "human" | "system";
   since?: string;
   until?: string;
+}
+
+/**
+ * Parse and validate query parameters
+ * @param query - Express request query object
+ * @returns Validation result with parsed filters or error message
+ */
+function parseQueryParams(
+  query: unknown
+): { ok: true; filters: EventFilterOptions } | { ok: false; error: string } {
+  const result = queryParamsSchema.safeParse(query);
+  if (!result.success) {
+    return { ok: false, error: result.error.issues[0].message };
+  }
+
+  const filters: EventFilterOptions = {};
+  const validated = result.data;
+
+  if (validated.type) {
+    filters.type = validated.type.includes(",")
+      ? (validated.type.split(",") as IntakeEventType[])
+      : (validated.type as IntakeEventType);
+  }
+
+  if (validated.actorKind) {
+    filters.actorKind = validated.actorKind;
+  }
+
+  if (validated.since) {
+    filters.since = validated.since;
+  }
+
+  if (validated.until) {
+    filters.until = validated.until;
+  }
+
+  return { ok: true, filters };
 }
 
 /**
@@ -133,34 +244,18 @@ export function createEventRoutes(manager: SubmissionManager) {
           return;
         }
 
-        // Parse filter options from query parameters
-        const filters: EventFilterOptions = {};
-
-        if (req.query.type) {
-          const typeParam = req.query.type as string;
-          filters.type = typeParam.includes(",")
-            ? (typeParam.split(",") as IntakeEventType[])
-            : (typeParam as IntakeEventType);
-        }
-
-        if (req.query.actorKind) {
-          filters.actorKind = req.query.actorKind as
-            | "agent"
-            | "human"
-            | "system";
-        }
-
-        if (req.query.since) {
-          filters.since = req.query.since as string;
-        }
-
-        if (req.query.until) {
-          filters.until = req.query.until as string;
+        // Parse and validate query parameters
+        const queryResult = parseQueryParams(req.query);
+        if (!queryResult.ok) {
+          res.status(400).json({
+            error: `Invalid query parameters: ${queryResult.error}`,
+          });
+          return;
         }
 
         // Apply filters to event stream
         const events = submission.events || [];
-        const filteredEvents = applyEventFilters(events, filters);
+        const filteredEvents = applyEventFilters(events, queryResult.filters);
 
         // Return the filtered event stream
         res.status(200).json({
