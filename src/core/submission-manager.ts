@@ -279,7 +279,8 @@ export class SubmissionManager {
         state: submission.state,
         payload: {
           fieldPath: fieldUpdate.fieldPath,
-          value: fieldUpdate.newValue,
+          oldValue: fieldUpdate.oldValue,
+          newValue: fieldUpdate.newValue,
         },
       };
 
