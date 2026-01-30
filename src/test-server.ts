@@ -42,7 +42,7 @@ app.use(express.json());
 
 const store = new MockStore();
 const eventEmitter = new MockEventEmitter();
-const manager = new SubmissionManager(store, eventEmitter, "http://localhost:3000");
+const manager = new SubmissionManager(store, eventEmitter, undefined, "http://localhost:3000");
 
 // Setup routes
 const routes = createSubmissionRoutes(manager);
