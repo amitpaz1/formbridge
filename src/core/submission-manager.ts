@@ -280,6 +280,9 @@ export class SubmissionManager {
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
 
+    // Rotate resume token on every state-changing operation
+    submission.resumeToken = `rtok_${randomUUID()}`;
+
     // Update state if still in draft
     if (submission.state === "draft") {
       submission.state = "in_progress";

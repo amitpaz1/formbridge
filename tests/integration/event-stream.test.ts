@@ -126,12 +126,13 @@ describe("Event Stream & Audit Trail Integration", () => {
         },
       };
 
-      await manager.setFields(setFieldsRequest);
+      const agentSetResult = await manager.setFields(setFieldsRequest);
+      expect(agentSetResult.ok).toBe(true);
 
-      // Step 3: Human updates a field
+      // Step 3: Human updates a field (using rotated token from previous setFields)
       const humanUpdateRequest: SetFieldsRequest = {
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: agentSetResult.ok ? agentSetResult.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           department: "Product Engineering", // Human corrects the department
@@ -194,7 +195,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       const createResponse = await manager.createSubmission(createRequest);
 
       // Agent fills more fields
-      await manager.setFields({
+      const agentSetResult2 = await manager.setFields({
         submissionId: createResponse.submissionId,
         resumeToken: createResponse.resumeToken,
         actor: agentActor,
@@ -203,11 +204,12 @@ describe("Event Stream & Audit Trail Integration", () => {
           address: "123 Main St",
         },
       });
+      expect(agentSetResult2.ok).toBe(true);
 
-      // Human corrects a field
+      // Human corrects a field (using rotated token)
       await manager.setFields({
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: agentSetResult2.ok ? agentSetResult2.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           taxId: "98-7654321", // Human corrects tax ID
@@ -314,7 +316,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       const createResponse = await manager.createSubmission(createRequest);
 
       // Update 1: draft -> pending
-      await manager.setFields({
+      const update1Result = await manager.setFields({
         submissionId: createResponse.submissionId,
         resumeToken: createResponse.resumeToken,
         actor: agentActor,
@@ -322,11 +324,12 @@ describe("Event Stream & Audit Trail Integration", () => {
           status: "pending",
         },
       });
+      expect(update1Result.ok).toBe(true);
 
-      // Update 2: pending -> approved
+      // Update 2: pending -> approved (using rotated token)
       await manager.setFields({
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: update1Result.ok ? update1Result.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           status: "approved",
@@ -401,7 +404,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       const createResponse = await manager.createSubmission(createRequest);
 
       // Agent updates
-      await manager.setFields({
+      const agentUpdateResult = await manager.setFields({
         submissionId: createResponse.submissionId,
         resumeToken: createResponse.resumeToken,
         actor: agentActor,
@@ -409,11 +412,12 @@ describe("Event Stream & Audit Trail Integration", () => {
           field2: "agent-value-2",
         },
       });
+      expect(agentUpdateResult.ok).toBe(true);
 
-      // Human updates
+      // Human updates (using rotated token)
       await manager.setFields({
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: agentUpdateResult.ok ? agentUpdateResult.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           field3: "human-value",
@@ -725,7 +729,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       expect(createResponse.submissionId).toMatch(/^sub_/);
 
       // Step 2: Update fields (agent adds more data)
-      await manager.setFields({
+      const agentUpdateResult2 = await manager.setFields({
         submissionId: createResponse.submissionId,
         resumeToken: createResponse.resumeToken,
         actor: agentActor,
@@ -735,22 +739,25 @@ describe("Event Stream & Audit Trail Integration", () => {
           salary: "100000",
         },
       });
+      expect(agentUpdateResult2.ok).toBe(true);
 
-      // Step 2b: Human corrects some fields
-      await manager.setFields({
+      // Step 2b: Human corrects some fields (using rotated token)
+      const humanUpdateResult = await manager.setFields({
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: agentUpdateResult2.ok ? agentUpdateResult2.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           department: "Product Engineering",
           salary: "120000",
         },
       });
+      expect(humanUpdateResult.ok).toBe(true);
 
-      // Step 3: Submit the submission
+      // Step 3: Submit the submission (using rotated token from last setFields)
+      const currentToken = humanUpdateResult.ok ? humanUpdateResult.resumeToken : createResponse.resumeToken;
       const submitResponse = await manager.submit({
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: currentToken,
         idempotencyKey: "idem_e2e_audit_submit",
         actor: humanActor,
       });

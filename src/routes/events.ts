@@ -300,7 +300,7 @@ export function createEventRoutes(manager: SubmissionManager) {
         });
       } catch (error) {
         if (error instanceof SubmissionNotFoundError) {
-          res.status(404).json({ error: error.message });
+          res.status(404).json({ error: "Submission not found" });
           return;
         }
         next(error);
@@ -398,7 +398,7 @@ export function createEventRoutes(manager: SubmissionManager) {
         }
       } catch (error) {
         if (error instanceof SubmissionNotFoundError) {
-          res.status(404).json({ error: error.message });
+          res.status(404).json({ error: "Submission not found" });
           return;
         }
         next(error);

@@ -531,12 +531,14 @@ describe("SubmissionManager", () => {
         },
       };
 
-      await manager.setFields(agentFields);
+      const agentSetResult = await manager.setFields(agentFields);
+      expect(agentSetResult.ok).toBe(true);
 
       // Step 3: Human opens resume URL and completes remaining fields
+      // Must use the rotated resume token from the previous setFields call
       const humanFields: SetFieldsRequest = {
         submissionId: createResponse.submissionId,
-        resumeToken: createResponse.resumeToken,
+        resumeToken: agentSetResult.ok ? agentSetResult.resumeToken : createResponse.resumeToken,
         actor: humanActor,
         fields: {
           w9Document: "file://uploads/w9.pdf",
