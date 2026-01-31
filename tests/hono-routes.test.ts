@@ -361,7 +361,7 @@ describe("Hono Approval Routes", () => {
       actor: testActor,
     });
     // Submit to trigger needs_review
-    const result = await submissionManager.submit({
+    const _result = await submissionManager.submit({
       submissionId: sub.submissionId,
       resumeToken: sub.resumeToken,
       actor: testActor,

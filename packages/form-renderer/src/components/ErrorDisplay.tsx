@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { SubmissionError, FieldError } from '../types/error';
+import type { SubmissionError, FieldError } from '../types/error';
 
 /**
  * Props for ErrorDisplay component

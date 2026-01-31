@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { FormBridgeForm } from '../../src/components/FormBridgeForm';
@@ -488,7 +488,7 @@ describe('Form Submission Integration', () => {
     });
 
     it('pre-fills form with initial data', async () => {
-      const user = userEvent.setup();
+      const _user = userEvent.setup();
       const initialData = {
         companyName: 'Pre-filled Corp',
         email: 'prefilled@example.com',

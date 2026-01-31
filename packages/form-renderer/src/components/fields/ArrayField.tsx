@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ArrayFieldProps, FieldMetadata } from '../../types';
+import type { ArrayFieldProps, FieldMetadata } from '../../types/index';
 
 /**
  * ArrayField - Renders an array field with add/remove buttons for dynamic lists
@@ -132,7 +132,7 @@ export const ArrayField: React.FC<
 
   const handleRemoveKeyDown = (
     e: React.KeyboardEvent<HTMLButtonElement>,
-    index: number
+    _index: number
   ) => {
     // Allow Escape key to blur the button
     if (e.key === 'Escape') {

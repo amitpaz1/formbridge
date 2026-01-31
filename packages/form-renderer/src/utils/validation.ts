@@ -3,10 +3,10 @@
  * Validates form data against IntakeSchema (JSON Schema)
  */
 
-import Ajv, { ErrorObject, ValidateFunction } from 'ajv';
+import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import { IntakeSchema, FormData, FieldPath } from '../types/schema';
-import { FieldError, ValidationResult } from '../types/error';
+import type { IntakeSchema, FormData, FieldPath } from '../types/schema';
+import type { FieldError, ValidationResult } from '../types/error';
 
 /**
  * AJV instance with format validation enabled
@@ -65,7 +65,7 @@ function convertAjvError(error: ErrorObject): FieldError {
   const received: unknown = error.data;
 
   switch (error.keyword) {
-    case 'required':
+    case 'required': {
       code = 'required';
       // For required errors, the field path is in params.missingProperty
       const missingField = error.params.missingProperty;
@@ -78,6 +78,7 @@ function convertAjvError(error: ErrorObject): FieldError {
         expected: 'value',
         received: undefined,
       };
+    }
 
     case 'type':
       code = 'invalid_type';
@@ -192,6 +193,8 @@ function formatFieldName(path: FieldPath): string {
   const segments = path.split('.');
   const lastSegment = segments[segments.length - 1];
 
+  if (!lastSegment) return 'Field';
+
   // Remove array indices
   const cleaned = lastSegment.replace(/\[(\d+)\]/g, '');
 
@@ -245,7 +248,7 @@ export function validateForm(
 export function validateField(
   schema: IntakeSchema,
   path: FieldPath,
-  value: unknown,
+  _value: unknown,
   data: FormData
 ): ValidationResult {
   // Validate the entire form to get all errors

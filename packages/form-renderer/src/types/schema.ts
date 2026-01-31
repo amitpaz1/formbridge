@@ -73,7 +73,7 @@ export interface JSONSchemaProperty {
 /**
  * Full JSON Schema definition (used as IntakeSchema)
  */
-export interface JSONSchema extends JSONSchemaProperty {
+export interface JSONSchema extends Omit<JSONSchemaProperty, 'required'> {
   $schema?: string;
   $id?: string;
   title?: string;

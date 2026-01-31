@@ -49,7 +49,7 @@ export function ApprovalQueuePage({
       { className: "fb-page__subtitle" },
       `${approvals.length} submission(s) pending review`
     ),
-    createElement(DataTable, {
+    createElement(DataTable<ApprovalRecord>, {
       data: approvals,
       columns,
       keyAccessor: (r: ApprovalRecord) => r.submissionId,

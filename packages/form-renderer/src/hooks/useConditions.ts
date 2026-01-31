@@ -10,7 +10,7 @@ import {
   evaluateConditions,
   type Condition,
   type ConditionResult,
-} from "../../../../src/core/condition-evaluator.js";
+} from "../core/condition-evaluator.js";
 
 export interface FieldConditionMap {
   [fieldPath: string]: {

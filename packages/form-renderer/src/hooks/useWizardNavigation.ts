@@ -11,13 +11,13 @@ import {
   type StepDefinition,
   type StepFieldSchema,
   type StepValidationResult,
-} from "../../../../src/core/step-validator.js";
+} from "../core/step-validator.js";
 
 export interface WizardNavigationState {
   /** Current step index (0-based) */
   currentIndex: number;
   /** Current step definition */
-  currentStep: StepDefinition;
+  currentStep: StepDefinition | null;
   /** All visible steps */
   visibleSteps: StepDefinition[];
   /** Completed step IDs */
@@ -58,7 +58,7 @@ export function useWizardNavigation(
     [steps, formValues]
   );
 
-  const currentStep = visibleSteps[currentIndex] ?? visibleSteps[0];
+  const currentStep = visibleSteps[currentIndex] ?? visibleSteps[0] ?? null;
 
   const state: WizardNavigationState = {
     currentIndex,
@@ -75,12 +75,17 @@ export function useWizardNavigation(
   };
 
   const validateCurrentStep = useCallback((): StepValidationResult => {
+    if (!currentStep) {
+      return { valid: true, stepId: '', errors: [] };
+    }
     return validateStep(currentStep, formValues, fieldSchemas);
   }, [currentStep, formValues, fieldSchemas]);
 
   const next = useCallback((): StepValidationResult | null => {
     const result = validateCurrentStep();
     if (!result.valid) return result;
+
+    if (!currentStep) return null;
 
     setCompletedSteps((prev) => new Set(prev).add(currentStep.id));
 
@@ -93,6 +98,8 @@ export function useWizardNavigation(
   }, [validateCurrentStep, currentStep, steps, formValues, visibleSteps]);
 
   const previous = useCallback(() => {
+    if (!currentStep) return;
+    
     const prevStep = getPreviousStep(steps, currentStep.id, formValues);
     if (prevStep) {
       const prevIndex = visibleSteps.findIndex((s) => s.id === prevStep.id);

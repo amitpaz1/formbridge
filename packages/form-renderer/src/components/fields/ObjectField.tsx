@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { ObjectFieldProps, FieldMetadata } from '../../types';
+import type { ObjectFieldProps, FieldMetadata } from '../../types';
 
 /**
  * ObjectField - Renders a nested object field with child fields
@@ -102,6 +102,7 @@ export const ObjectField: React.FC<
       // Navigate to the parent of the target field
       for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i];
+        if (key === undefined) continue;
         if (!current[key] || typeof current[key] !== 'object') {
           current[key] = {};
         } else {
@@ -111,7 +112,10 @@ export const ObjectField: React.FC<
       }
 
       // Set the final value
-      current[keys[keys.length - 1]] = fieldValue;
+      const lastKey = keys[keys.length - 1];
+      if (lastKey !== undefined) {
+        current[lastKey] = fieldValue;
+      }
       onChange(newValue);
     }
   };
@@ -127,7 +131,7 @@ export const ObjectField: React.FC<
     let current: any = value;
 
     for (const key of keys) {
-      if (current && typeof current === 'object' && key in current) {
+      if (key !== undefined && current && typeof current === 'object' && key in current) {
         current = current[key];
       } else {
         return undefined;
@@ -179,7 +183,7 @@ export const ObjectField: React.FC<
         )}
 
         <div className="formbridge-object-field__fields">
-          {fields.map((fieldMetadata) => {
+          {fields.map((fieldMetadata: FieldMetadata) => {
             const fieldPath = fieldMetadata.path;
             const fieldValue = getFieldValue(fieldPath);
 
@@ -194,7 +198,7 @@ export const ObjectField: React.FC<
                     fieldMetadata,
                     fieldPath,
                     fieldValue,
-                    (newValue) => handleFieldChange(fieldPath, newValue),
+                    (newValue: unknown) => handleFieldChange(fieldPath, newValue),
                     onBlur,
                     undefined // error for child field would come from parent validation
                   )}

@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { SubmissionManager } from "../../src/core/submission-manager";
-import { createMcpServer, registerTools } from "../../src/mcp/tool-generator";
+import { createMcpServer, registerTools as _registerTools } from "../../src/mcp/tool-generator";
 import type {
   Actor,
   IntakeEvent,

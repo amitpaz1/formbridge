@@ -3,13 +3,40 @@
  * Handles communication with the backend API including event emission
  */
 
-import type {
-  Actor,
-  CreateSubmissionRequest,
-  CreateSubmissionResponse,
-  SubmitRequest,
-  SubmitResponse,
-} from '../types';
+import type { Actor } from '../types';
+
+// Define API types locally to avoid circular imports
+export interface CreateSubmissionRequest {
+  intakeId: string;
+  idempotencyKey?: string;
+  actor: Actor;
+  initialFields?: Record<string, unknown>;
+  ttlMs?: number;
+}
+
+export interface CreateSubmissionResponse {
+  ok: true;
+  submissionId: string;
+  state: 'draft' | 'in_progress';
+  resumeToken: string;
+  schema: unknown;
+  missingFields?: string[];
+}
+
+export interface SubmitRequest {
+  intakeId: string;
+  submissionId: string;
+  resumeToken: string;
+  idempotencyKey: string;
+  actor: Actor;
+}
+
+export interface SubmitResponse {
+  ok: true;
+  submissionId: string;
+  state: 'submitted' | 'needs_review' | 'finalized';
+  resumeToken: string;
+}
 
 /**
  * Field-level comment for request_changes action

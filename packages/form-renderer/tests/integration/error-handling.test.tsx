@@ -5,14 +5,13 @@
 
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { FormBridgeForm } from '../../src/components/FormBridgeForm';
 import {
   IntakeSchema,
   Actor,
-  CreateSubmissionResponse,
 } from '../../src/types';
 import { IntakeError } from '../../src/types/error';
 

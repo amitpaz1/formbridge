@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { BooleanFieldProps } from '../../types';
+import type { BooleanFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
 /**
@@ -42,7 +42,7 @@ export const BooleanField: React.FC<BooleanFieldProps> = ({
   disabled = false,
   className = '',
 }) => {
-  const { label, description, required, schema, hint } = metadata;
+  const { label, description, required, hint } = metadata;
 
   // Extract schema properties
   const autoComplete = hint?.autoComplete;

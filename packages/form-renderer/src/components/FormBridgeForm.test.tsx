@@ -7,8 +7,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { FormBridgeForm } from './FormBridgeForm';
-import { IntakeSchema, Actor, FormData, SubmissionError } from '../types';
-import { FormBridgeApiClient } from '../api/client';
+import { IntakeSchema, Actor, SubmissionError } from '../types';
+import { FormBridgeApiClient as _FormBridgeApiClient } from '../api/client';
 
 // Mock the API client
 vi.mock('../api/client', () => ({

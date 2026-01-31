@@ -3,7 +3,7 @@
  * Accepts resumeToken query param and loads pre-filled submission data
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { useResumeSubmission } from '../hooks/useResumeSubmission';
 import { FormBridgeForm } from './FormBridgeForm';
 import type { Submission } from '../hooks/useResumeSubmission';
@@ -61,9 +61,15 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
 
   // Use refs for callbacks to avoid infinite re-render loops
   const onLoadRef = useRef(onLoad);
-  onLoadRef.current = onLoad;
   const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
+  
+  useEffect(() => {
+    onLoadRef.current = onLoad;
+  }, [onLoad]);
+  
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const handleLoad = React.useCallback((submission: Submission) => {
     onLoadRef.current?.(submission.id, submission.resumeToken);

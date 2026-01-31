@@ -3,7 +3,7 @@
  * Based on the IntakeError specification
  */
 
-import { FieldPath } from './schema';
+import type { FieldPath } from './schema';
 
 /**
  * Submission states from the Intake Contract

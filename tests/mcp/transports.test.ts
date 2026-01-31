@@ -515,9 +515,9 @@ describe('Transport Options and Configuration', () => {
     });
 
     it('should support error handling configuration', () => {
-      let errorCaught = false;
-      const errorHandler = (error: Error) => {
-        errorCaught = true;
+      let _errorCaught = false;
+      const errorHandler = (_error: Error) => {
+        _errorCaught = true;
       };
 
       const transport = createConfiguredStdioTransport({
@@ -528,9 +528,9 @@ describe('Transport Options and Configuration', () => {
     });
 
     it('should support close handling configuration', () => {
-      let closeCalled = false;
+      let _closeCalled = false;
       const closeHandler = () => {
-        closeCalled = true;
+        _closeCalled = true;
       };
 
       const transport = createConfiguredStdioTransport({

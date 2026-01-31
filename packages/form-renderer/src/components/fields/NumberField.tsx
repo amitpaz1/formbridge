@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { NumberFieldProps } from '../../types';
+import type { NumberFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
 /**

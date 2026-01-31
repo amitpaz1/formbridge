@@ -16,10 +16,10 @@ import { z } from 'zod';
 import {
   mapToIntakeError,
   mapMultipleToIntakeError,
-  type ErrorMapperOptions,
+  type ErrorMapperOptions as _ErrorMapperOptions,
 } from '../../src/validation/error-mapper';
 import { validateSubmission } from '../../src/validation/validator';
-import type { IntakeError, IntakeErrorType } from '../../src/types/intake-contract';
+import type { IntakeError as _IntakeError, IntakeErrorType as _IntakeErrorType } from '../../src/types/intake-contract';
 
 describe('mapToIntakeError', () => {
   describe('missing field errors', () => {

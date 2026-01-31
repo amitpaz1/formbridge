@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
-import { FileFieldProps } from '../../types';
+import type { FileFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
 /**
@@ -134,7 +134,7 @@ export const FileField: React.FC<FileFieldProps> = ({
   maxCount,
   multiple = false,
 }) => {
-  const { label, description, required, hint } = metadata;
+  const { label, description, required } = metadata;
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<Map<string, FileProgress>>(new Map());
@@ -173,7 +173,7 @@ export const FileField: React.FC<FileFieldProps> = ({
   /**
    * Update file previews when files change
    */
-  useEffect(() => {
+  const currentPreviews = useMemo(() => {
     const newPreviews = new Map<string, FilePreview>();
 
     // Generate previews for current files
@@ -193,27 +193,32 @@ export const FileField: React.FC<FileFieldProps> = ({
       }
     });
 
+    return newPreviews;
+  }, [currentFiles, getFileKey, generatePreview, filePreviews]);
+
+  // Update state when previews change and clean up old URLs
+  useEffect(() => {
     // Clean up old preview URLs that are no longer needed
     filePreviews.forEach((preview, key) => {
-      if (!newPreviews.has(key)) {
+      if (!currentPreviews.has(key)) {
         URL.revokeObjectURL(preview.url);
       }
     });
 
-    setFilePreviews(newPreviews);
+    setFilePreviews(currentPreviews);
 
     // Cleanup function to revoke all preview URLs on unmount
     return () => {
-      newPreviews.forEach((preview) => {
+      currentPreviews.forEach((preview) => {
         URL.revokeObjectURL(preview.url);
       });
     };
-  }, [currentFiles, getFileKey, generatePreview]);
+  }, [currentPreviews, filePreviews]);
 
   /**
    * Initialize upload progress for new files
    */
-  useEffect(() => {
+  const currentProgress = useMemo(() => {
     const newProgress = new Map<string, FileProgress>(uploadProgress);
 
     // Add progress tracking for new files
@@ -236,8 +241,13 @@ export const FileField: React.FC<FileFieldProps> = ({
       }
     });
 
-    setUploadProgress(newProgress);
-  }, [currentFiles, getFileKey]);
+    return newProgress;
+  }, [currentFiles, getFileKey, uploadProgress]);
+
+  // Update progress state when it changes
+  useEffect(() => {
+    setUploadProgress(currentProgress);
+  }, [currentProgress]);
 
   // Handle file selection (from input or drop)
   const handleFiles = (files: FileList | null) => {
@@ -269,7 +279,7 @@ export const FileField: React.FC<FileFieldProps> = ({
     if (multiple) {
       onChange([...currentFiles, ...newFiles]);
     } else {
-      onChange(newFiles[0]);
+      onChange(newFiles[0] || null);
     }
   };
 

@@ -76,7 +76,7 @@ export function SubmissionBrowserPage({
     // Table
     loading
       ? createElement("div", { className: "fb-page--loading" }, "Loading submissions...")
-      : createElement(DataTable, {
+      : createElement(DataTable<SubmissionSummary>, {
           data: submissions,
           columns,
           keyAccessor: (r: SubmissionSummary) => r.id,

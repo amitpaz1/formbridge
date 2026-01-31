@@ -175,7 +175,7 @@ describe('ArrayField', () => {
       const metadata = createMetadata({ label: 'Names' });
       const itemSchema = createItemMetadata('string', 'Name');
 
-      const renderItem = vi.fn((itemMetadata, path, value, onChange, onBlur, error, index) => (
+      const renderItem = vi.fn((itemMetadata, path, value, onChange, _onBlur, _error, _index) => (
         <div data-testid={`rendered-${path}`}>
           <label>{itemMetadata.label}</label>
           <input

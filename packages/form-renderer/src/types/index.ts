@@ -2,9 +2,9 @@
  * Main types and interfaces for @formbridge/react-form-renderer
  */
 
-import { ReactNode } from 'react';
-import { IntakeSchema, FormData, FieldPath, FieldMetadata, UIHints } from './schema';
-import { FormErrors, SubmissionError, ValidationResult } from './error';
+import type { ReactNode } from 'react';
+import type { IntakeSchema, FormData, FieldPath, FieldMetadata, UIHints } from './schema';
+import type { FormErrors, SubmissionError, ValidationResult } from './error';
 
 // Re-export types from schema and error modules
 export * from './schema';
@@ -22,6 +22,14 @@ export interface Actor {
   name?: string;
   /** Additional metadata */
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * Field-level actor attribution
+ * Maps field paths to the actor who filled them
+ */
+export interface FieldAttribution {
+  [fieldPath: string]: Actor;
 }
 
 /**
@@ -74,15 +82,15 @@ export interface FormBridgeFormProps {
 /**
  * Base props for all field components
  */
-export interface BaseFieldProps {
+export interface BaseFieldProps<T = unknown> {
   /** Field path (dot notation) */
   path: FieldPath;
   /** Field metadata from schema */
   metadata: FieldMetadata;
   /** Current field value */
-  value: unknown;
+  value: T;
   /** Change handler */
-  onChange: (value: unknown) => void;
+  onChange: (value: T) => void;
   /** Blur handler */
   onBlur?: () => void;
   /** Error message (if any) */
@@ -117,40 +125,25 @@ export interface FieldWrapperProps {
  * Props for field-specific components
  */
 
-export interface StringFieldProps extends BaseFieldProps {
-  value: string;
-  onChange: (value: string) => void;
-}
+export type StringFieldProps = BaseFieldProps<string>;
 
-export interface NumberFieldProps extends BaseFieldProps {
-  value: number | null;
-  onChange: (value: number | null) => void;
-}
+export type NumberFieldProps = BaseFieldProps<number | null>;
 
-export interface BooleanFieldProps extends BaseFieldProps {
-  value: boolean;
-  onChange: (value: boolean) => void;
-}
+export type BooleanFieldProps = BaseFieldProps<boolean>;
 
-export interface EnumFieldProps extends BaseFieldProps {
-  value: unknown;
-  onChange: (value: unknown) => void;
+export interface EnumFieldProps extends BaseFieldProps<unknown> {
   /** Enum values from schema */
   options: unknown[];
   /** Whether to render as radio buttons (vs select dropdown) */
   asRadio?: boolean;
 }
 
-export interface ObjectFieldProps extends BaseFieldProps {
-  value: Record<string, unknown>;
-  onChange: (value: Record<string, unknown>) => void;
+export interface ObjectFieldProps extends BaseFieldProps<Record<string, unknown>> {
   /** Child field metadata */
   fields: FieldMetadata[];
 }
 
-export interface ArrayFieldProps extends BaseFieldProps {
-  value: unknown[];
-  onChange: (value: unknown[]) => void;
+export interface ArrayFieldProps extends BaseFieldProps<unknown[]> {
   /** Item schema */
   itemSchema: FieldMetadata;
   /** Minimum number of items */
@@ -159,9 +152,7 @@ export interface ArrayFieldProps extends BaseFieldProps {
   maxItems?: number;
 }
 
-export interface FileFieldProps extends BaseFieldProps {
-  value: File | File[] | null;
-  onChange: (value: File | File[] | null) => void;
+export interface FileFieldProps extends BaseFieldProps<File | File[] | null> {
   /** Maximum file size in bytes */
   maxSize?: number;
   /** Allowed MIME types */

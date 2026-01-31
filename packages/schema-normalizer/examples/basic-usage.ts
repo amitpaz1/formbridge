@@ -16,7 +16,7 @@ import {
   OpenAPIParser,
   JSONSchemaSerializer,
   serializeToJSONSchema,
-  type IntakeSchema,
+  type _IntakeSchema,
   type JSONSchema,
   type OpenAPIDocument,
 } from '../src/index';
@@ -135,7 +135,7 @@ function example2_ZodSchema() {
     console.log('\n');
 
     return intakeSchema;
-  } catch (error) {
+  } catch {
     console.error('Zod is not installed. Install with: npm install zod');
     console.log('\n');
     return null;
@@ -387,12 +387,12 @@ function example7_ParserOptions() {
 
   // Strict mode (default: true)
   const strictParser = new JSONSchemaParser({ strict: true });
-  const ir1 = strictParser.parse(jsonSchema);
+  const _ir1 = strictParser.parse(jsonSchema);
   console.log('Strict mode enabled (default)');
 
   // Include metadata (default: true)
   const noMetadataParser = new JSONSchemaParser({ includeMetadata: false });
-  const ir2 = noMetadataParser.parse(jsonSchema);
+  const _ir2 = noMetadataParser.parse(jsonSchema);
   console.log('Metadata inclusion disabled');
 
   // Custom metadata

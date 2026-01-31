@@ -22,7 +22,7 @@ import { validateSubmission } from '../../src/validation/validator';
 import { mapToIntakeError } from '../../src/validation/error-mapper';
 import {
   isIntakeError,
-  type IntakeError,
+  type IntakeError as _IntakeError,
 } from '../../src/types/intake-contract';
 
 describe('End-to-End Integration Tests', () => {

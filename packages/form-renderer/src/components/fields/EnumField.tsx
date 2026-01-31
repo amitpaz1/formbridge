@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { EnumFieldProps } from '../../types';
+import type { EnumFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
 /**
@@ -108,7 +108,7 @@ export const EnumField: React.FC<EnumFieldProps> = ({
   options,
   asRadio,
 }) => {
-  const { label, description, required, schema, hint } = metadata;
+  const { label, description, required, hint } = metadata;
 
   // Extract schema properties
   const autoComplete = hint?.autoComplete;
@@ -141,7 +141,7 @@ export const EnumField: React.FC<EnumFieldProps> = ({
   };
 
   // Handle keyboard events for better accessibility
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLSelectElement>) => {
     // Allow Escape key to blur the field (common accessibility pattern)
     if (e.key === 'Escape') {
       e.currentTarget.blur();
@@ -166,7 +166,7 @@ export const EnumField: React.FC<EnumFieldProps> = ({
           aria-required={required ? 'true' : 'false'}
           data-testid={`field-${path}-radio-group`}
         >
-          {options.map((option, index) => {
+          {options.map((option: unknown, index: number) => {
             const optionValue = valueToString(option);
             const optionId = `${path}-option-${index}`;
             const isChecked = stringValue === optionValue;
@@ -230,7 +230,7 @@ export const EnumField: React.FC<EnumFieldProps> = ({
           </option>
         )}
 
-        {options.map((option, index) => {
+        {options.map((option: unknown, index: number) => {
           const optionValue = valueToString(option);
           return (
             <option

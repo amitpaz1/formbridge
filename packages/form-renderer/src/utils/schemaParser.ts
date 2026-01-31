@@ -2,7 +2,7 @@
  * Schema parser utility for extracting field metadata from IntakeSchema
  */
 
-import {
+import type {
   IntakeSchema,
   JSONSchemaProperty,
   JSONSchemaType,
@@ -89,7 +89,9 @@ export function parseObjectFields(
     return fields;
   }
 
-  const requiredFields = new Set(property.required || []);
+  const requiredFields = new Set(
+    Array.isArray(property.required) ? property.required : []
+  );
 
   for (const [key, childProperty] of Object.entries(property.properties)) {
     const childPath = `${parentPath}.${key}`;
@@ -167,6 +169,8 @@ export function formatLabel(path: FieldPath): string {
   // Get the last segment of the path (e.g., "city" from "address.city")
   const segments = path.split('.');
   const lastSegment = segments[segments.length - 1];
+
+  if (!lastSegment) return path;
 
   // Remove array indices (e.g., "[0]")
   const cleaned = lastSegment.replace(/\[\d+\]/g, '');
@@ -260,7 +264,9 @@ export function getFieldValue(
     const arrayMatch = segment.match(/^(.+)\[(\d+)\]$/);
     if (arrayMatch) {
       const [, key, index] = arrayMatch;
-      current = current?.[key]?.[parseInt(index, 10)];
+      if (key && index) {
+        current = current?.[key]?.[parseInt(index, 10)];
+      }
     } else {
       current = current?.[segment];
     }
@@ -292,18 +298,22 @@ export function setFieldValue(
   // Navigate to the parent of the target field
   for (let i = 0; i < segments.length - 1; i++) {
     const segment = segments[i];
+    if (!segment) continue;
 
     // Handle array indices
     const arrayMatch = segment.match(/^(.+)\[(\d+)\]$/);
     if (arrayMatch) {
       const [, key, index] = arrayMatch;
+      if (!key || !index) continue;
+      
       if (!current[key]) {
         current[key] = [];
       }
-      if (!current[key][parseInt(index, 10)]) {
-        current[key][parseInt(index, 10)] = {};
+      const indexNum = parseInt(index, 10);
+      if (!current[key][indexNum]) {
+        current[key][indexNum] = {};
       }
-      current = current[key][parseInt(index, 10)];
+      current = current[key][indexNum];
     } else {
       if (!current[segment]) {
         current[segment] = {};
@@ -317,13 +327,17 @@ export function setFieldValue(
 
   // Set the final value
   const lastSegment = segments[segments.length - 1];
+  if (!lastSegment) return result;
+  
   const arrayMatch = lastSegment.match(/^(.+)\[(\d+)\]$/);
   if (arrayMatch) {
     const [, key, index] = arrayMatch;
-    if (!current[key]) {
-      current[key] = [];
+    if (key && index) {
+      if (!current[key]) {
+        current[key] = [];
+      }
+      current[key][parseInt(index, 10)] = value;
     }
-    current[key][parseInt(index, 10)] = value;
   } else {
     current[lastSegment] = value;
   }

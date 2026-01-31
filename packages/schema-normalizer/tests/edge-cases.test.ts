@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { JSONSchemaParser, JSONSchema } from '../src/parsers/json-schema-parser';
 import { ZodParser } from '../src/parsers/zod-parser';
 import { OpenAPIParser, OpenAPIDocument } from '../src/parsers/openapi-parser';
-import type { IntakeSchema } from '../src/types/intake-schema';
+import type { IntakeSchema as _IntakeSchema } from '../src/types/intake-schema';
 
 describe('Edge Cases - Deeply Nested Structures', () => {
   const jsonSchemaParser = new JSONSchemaParser();
@@ -244,7 +244,7 @@ describe('Edge Cases - Deeply Nested Structures', () => {
 
 describe('Edge Cases - Boundary Values', () => {
   const jsonSchemaParser = new JSONSchemaParser();
-  const zodParser = new ZodParser();
+  const _zodParser = new ZodParser();
 
   it('should handle empty string with minLength constraint', () => {
     const schema: JSONSchema = {

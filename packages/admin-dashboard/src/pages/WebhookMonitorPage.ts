@@ -64,7 +64,7 @@ export function WebhookMonitorPage({
     "div",
     { className: "fb-page" },
     createElement("h1", { className: "fb-page__title" }, "Webhook Monitor"),
-    createElement(DataTable, {
+    createElement(DataTable<DeliveryRecord>, {
       data: deliveries,
       columns,
       keyAccessor: (r: DeliveryRecord) => r.deliveryId,

@@ -4,16 +4,16 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import {
+import type {
   IntakeSchema,
   FormData,
   Actor,
   UseFormSubmissionReturn,
   FormSubmissionState,
 } from '../types';
-import { SubmissionError, IntakeError } from '../types/error';
+import type { SubmissionError } from '../types/error';
 import { FormBridgeApiClient } from '../api/client';
-import { UseValidationReturn } from '../types';
+import type { UseValidationReturn } from '../types';
 
 /**
  * Configuration for useFormSubmission hook
@@ -54,11 +54,12 @@ export function useFormSubmission(
   /**
    * Convert IntakeError to SubmissionError
    */
-  const convertIntakeError = useCallback((intakeError: IntakeError): SubmissionError => {
+  const convertIntakeError = useCallback((intakeError: any): SubmissionError => {
+    const error = intakeError?.error || intakeError || {};
     return {
-      message: intakeError.error.message || 'Submission failed',
-      fieldErrors: intakeError.error.fields,
-      retryable: intakeError.error.retryable,
+      message: error.message || 'Submission failed',
+      fieldErrors: error.fields,
+      retryable: error.retryable !== false, // Default to true if not specified
     };
   }, []);
 

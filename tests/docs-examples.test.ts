@@ -5,8 +5,8 @@
 
 import { describe, it, expect } from "vitest";
 import { createFormBridgeAppWithIntakes } from "../src/app";
-import { WebhookManager, signPayload, verifySignature } from "../src/core/webhook-manager";
-import { InMemoryDeliveryQueue } from "../src/core/delivery-queue";
+import { WebhookManager as _WebhookManager, signPayload, verifySignature } from "../src/core/webhook-manager";
+import { InMemoryDeliveryQueue as _InMemoryDeliveryQueue } from "../src/core/delivery-queue";
 import { InMemoryEventStore } from "../src/core/event-store";
 
 describe("Documentation Code Examples", () => {

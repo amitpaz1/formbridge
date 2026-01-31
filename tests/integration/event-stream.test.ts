@@ -16,7 +16,7 @@ import type {
   IntakeEvent,
   CreateSubmissionRequest,
   SetFieldsRequest,
-  SubmitRequest,
+  SubmitRequest as _SubmitRequest,
 } from "../../src/types/intake-contract";
 import type { Submission } from "../../src/types";
 
@@ -94,7 +94,7 @@ describe("Event Stream & Audit Trail Integration", () => {
     name: "Data Reviewer",
   };
 
-  const systemActor: Actor = {
+  const _systemActor: Actor = {
     kind: "system",
     id: "system-validator",
     name: "Validation System",

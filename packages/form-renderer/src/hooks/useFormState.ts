@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import { FormData, FieldPath, UseFormStateReturn } from '../types';
+import type { FormData, FieldPath, UseFormStateReturn } from '../types';
 import { getFieldValue, setFieldValue } from '../utils/schemaParser';
 
 /**

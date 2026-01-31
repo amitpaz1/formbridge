@@ -4,14 +4,14 @@
  * Provides sortable columns, pagination controls, and row click handling.
  */
 
-import { createElement } from "react";
+import { createElement, ReactNode } from "react";
 
 export interface ColumnDef<T> {
   id: string;
   header: string;
   accessor: (row: T) => string | number | boolean | null | undefined;
   sortable?: boolean;
-  render?: (value: unknown, row: T) => unknown;
+  render?: (value: unknown, row: T) => ReactNode;
 }
 
 export interface DataTableProps<T> {

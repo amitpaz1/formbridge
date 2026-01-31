@@ -299,13 +299,14 @@ export class ZodParser implements Parser<ZodSchema> {
         case 'datetime':
           constraints.format = 'date-time';
           break;
-        case 'regex':
+        case 'regex': {
           // Extract the regex pattern
           const regex = (check as { regex?: RegExp }).regex;
           if (regex) {
             constraints.pattern = regex.source;
           }
           break;
+        }
         // Other Zod string checks we can map:
         case 'cuid':
         case 'cuid2':
@@ -313,7 +314,7 @@ export class ZodParser implements Parser<ZodSchema> {
           // These don't have direct JSON Schema equivalents, but we could use regex
           // For now, skip them
           break;
-        case 'ip':
+        case 'ip': {
           // Could be ipv4 or ipv6, but Zod doesn't specify which
           // We'll need the version from the check
           const version = (check as { version?: string }).version;
@@ -323,12 +324,14 @@ export class ZodParser implements Parser<ZodSchema> {
             constraints.format = 'ipv6';
           }
           break;
-        case 'length':
+        }
+        case 'length': {
           // Exact length - set both min and max
           const length = check.value as number;
           constraints.minLength = length;
           constraints.maxLength = length;
           break;
+        }
         case 'includes':
         case 'startsWith':
         case 'endsWith':
@@ -506,12 +509,13 @@ export class ZodParser implements Parser<ZodSchema> {
         case 'max':
           constraints.maxItems = check.value as number;
           break;
-        case 'length':
+        case 'length': {
           // Exact length - set both min and max
           const length = check.value as number;
           constraints.minItems = length;
           constraints.maxItems = length;
           break;
+        }
       }
     }
 

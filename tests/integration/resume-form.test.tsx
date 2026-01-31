@@ -350,7 +350,7 @@ describe('Resume Form Integration - Human Handoff', () => {
 
   describe('Human Can Edit Agent-Filled Fields', () => {
     it('should allow human to modify agent-filled fields', () => {
-      const { container } = render(
+      const { container: _container } = render(
         <FormBridgeForm
           schema={mockSchema}
           fields={mockSubmission.fields}
@@ -417,8 +417,8 @@ describe('Resume Form Integration - Human Handoff', () => {
       );
 
       // Address and Insurance are not required
-      const addressLabel = screen.getByText('Address');
-      const insuranceLabel = screen.getByText('Insurance Certificate');
+      const _addressLabel = screen.getByText('Address');
+      const _insuranceLabel = screen.getByText('Insurance Certificate');
 
       // These should not have asterisk in the required field sense
       // (They may have the asterisk from another context, so we check the input required attribute)

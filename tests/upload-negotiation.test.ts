@@ -188,7 +188,7 @@ describe('Upload Negotiation Integration Tests', () => {
     // Clean up temporary storage directory
     try {
       await fs.rm(storageDir, { recursive: true, force: true });
-    } catch (error) {
+    } catch {
       // Ignore cleanup errors
     }
   });

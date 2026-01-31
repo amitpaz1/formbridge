@@ -1,4 +1,4 @@
-import { IntakeSchema } from '@formbridge/react-form-renderer';
+import { IntakeSchema } from '@formbridge/form-renderer';
 
 /**
  * Vendor Onboarding Schema
@@ -211,10 +211,11 @@ export const vendorOnboardingSchema: IntakeSchema = {
       format: 'binary',
       title: 'Company Documents',
       description: 'Upload relevant company documents (W-9, certificates, etc.)',
-      maxSize: 5 * 1024 * 1024, // 5MB
-      allowedTypes: ['application/pdf', 'image/png', 'image/jpeg'],
-      maxCount: 3,
-      multiple: true,
+      // Custom file constraints would be handled by UI hints or custom properties
+      // maxSize: 5 * 1024 * 1024, // 5MB
+      // allowedTypes: ['application/pdf', 'image/png', 'image/jpeg'],
+      // maxCount: 3,
+      // multiple: true,
     },
   },
   required: [

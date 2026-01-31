@@ -131,19 +131,6 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
     setLocalFields(fields);
   }, [fields]);
 
-  // If submission exists and is in needs_review state, render ReviewerView
-  if (submission && submission.state === 'needs_review') {
-    return (
-      <ReviewerView
-        submission={submission}
-        schema={schema}
-        reviewer={currentActor}
-        className={className}
-        approvalActions={approvalActions}
-      />
-    );
-  }
-
   /**
    * Handle field value change
    */
@@ -173,6 +160,19 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
     [localFields, onSubmit]
   );
 
+  // If submission exists and is in needs_review state, render ReviewerView
+  if (submission && submission.state === 'needs_review') {
+    return (
+      <ReviewerView
+        submission={submission}
+        schema={schema}
+        reviewer={currentActor}
+        className={className}
+        approvalActions={approvalActions}
+      />
+    );
+  }
+
   /**
    * Render a single form field based on schema property
    */
@@ -194,7 +194,7 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
     return (
       <FieldWrapper
         key={fieldPath}
-        fieldPath={fieldPath}
+        path={fieldPath}
         label={fieldLabel}
         fieldAttribution={attribution}
         required={isRequired}

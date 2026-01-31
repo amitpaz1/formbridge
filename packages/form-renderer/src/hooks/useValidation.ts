@@ -4,7 +4,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react';
-import {
+import type {
   IntakeSchema,
   FormData,
   FieldPath,

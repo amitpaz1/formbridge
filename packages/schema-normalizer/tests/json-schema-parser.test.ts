@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { JSONSchemaParser, parseJSONSchema } from '../src/parsers/json-schema-parser';
 import type { JSONSchema } from '../src/parsers/json-schema-parser';
 import type {
-  IntakeSchema,
+  IntakeSchema as _IntakeSchema,
   StringField,
   NumberField,
   IntegerField,

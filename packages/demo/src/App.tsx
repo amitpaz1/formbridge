@@ -243,7 +243,7 @@ const ReviewerPage: React.FC = () => {
   /**
    * Handle approval action
    */
-  const handleApprove = async (data: {
+  const handleApprove = async (_data: {
     submissionId: string;
     resumeToken: string;
     actor: { kind: string; id: string; name?: string };

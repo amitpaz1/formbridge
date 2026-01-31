@@ -16,7 +16,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { ZodParser } from '../src/parsers/zod-parser';
 import type {
-  IntakeSchema,
+  IntakeSchema as _IntakeSchema,
   StringField,
   NumberField,
   IntegerField,

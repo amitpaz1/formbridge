@@ -12,9 +12,11 @@ import type { FieldComment } from './ApprovalActions';
  */
 export interface FieldWrapperProps {
   /** Field path/name (e.g., "vendorName", "address.street") */
-  fieldPath: string;
+  path: string;
   /** Field label to display */
   label: string;
+  /** Field description */
+  description?: string;
   /** Actor who filled this field (from fieldAttribution map) */
   fieldAttribution?: Actor;
   /** Whether the field is required */
@@ -32,7 +34,7 @@ export interface FieldWrapperProps {
   /** Whether to show comment input for review mode */
   reviewMode?: boolean;
   /** Callback when reviewer adds/edits a comment */
-  onCommentChange?: (fieldPath: string, comment: string) => void;
+  onCommentChange?: (path: string, comment: string) => void;
   /** Placeholder text for comment input */
   commentPlaceholder?: string;
 }
@@ -47,7 +49,7 @@ export interface FieldWrapperProps {
  * @example
  * ```tsx
  * <FieldWrapper
- *   fieldPath="vendorName"
+ *   path="vendorName"
  *   label="Vendor Name"
  *   fieldAttribution={{ kind: "agent", id: "agent_123", name: "AutoVendor" }}
  *   required
@@ -57,8 +59,9 @@ export interface FieldWrapperProps {
  * ```
  */
 export const FieldWrapper: React.FC<FieldWrapperProps> = ({
-  fieldPath,
+  path,
   label,
+  description,
   fieldAttribution,
   required = false,
   error,
@@ -74,7 +77,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({
   const [localComment, setLocalComment] = useState(fieldComment?.comment || '');
 
   // Generate unique ID for accessibility
-  const fieldId = `field-${fieldPath.replace(/\./g, '-')}`;
+  const fieldId = `field-${path.replace(/\./g, '-')}`;
   const errorId = error ? `${fieldId}-error` : undefined;
   const helperId = helperText ? `${fieldId}-helper` : undefined;
   const commentId = `${fieldId}-comment`;
@@ -84,13 +87,13 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({
   const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newComment = e.target.value;
     setLocalComment(newComment);
-    onCommentChange?.(fieldPath, newComment);
+    onCommentChange?.(path, newComment);
   };
 
   return (
     <div
       className={`formbridge-field-wrapper ${error ? 'formbridge-field-wrapper--error' : ''} ${className}`.trim()}
-      data-field-path={fieldPath}
+      data-field-path={path}
     >
       {/* Label and attribution badge */}
       <div className="formbridge-field-wrapper__header">
@@ -123,6 +126,13 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({
           </span>
         )}
       </div>
+
+      {/* Description */}
+      {description && (
+        <div className="formbridge-field-wrapper__description">
+          {description}
+        </div>
+      )}
 
       {/* Field input */}
       <div
@@ -203,7 +213,7 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({
             placeholder={commentPlaceholder}
             rows={3}
             aria-label={`Add comment for ${label}`}
-            data-field-path={fieldPath}
+            data-field-path={path}
           />
         </div>
       )}

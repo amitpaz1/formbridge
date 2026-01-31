@@ -3,7 +3,7 @@
  */
 
 import React from "react";
-import type { StepDefinition } from "../../../../src/core/step-validator.js";
+import type { StepDefinition } from "../core/step-validator.js";
 
 export interface StepIndicatorProps {
   steps: StepDefinition[];

@@ -380,7 +380,7 @@ describe("Analytics Route", () => {
 
   it("should include recent events in summary", async () => {
     const provider = createMockProvider({
-      getRecentEvents: (limit: number) => [
+      getRecentEvents: (_limit: number) => [
         {
           eventId: "e1",
           type: "submission.created" as any,

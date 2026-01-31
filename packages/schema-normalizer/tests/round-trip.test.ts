@@ -26,7 +26,7 @@ import type { IntakeSchema } from '../src/types/intake-schema';
 function testRoundTrip(
   ir1: IntakeSchema,
   ir2: IntakeSchema,
-  testName: string
+  _testName: string
 ): void {
   // Create normalized versions for comparison (strip source metadata)
   const normalized1 = normalizeIR(ir1);
@@ -43,7 +43,7 @@ function normalizeIR(ir: IntakeSchema): IntakeSchema {
   const normalized = { ...ir };
 
   if (normalized.metadata) {
-    const { source, $schema, openapi, operationId, path, method, tags, ...rest } = normalized.metadata;
+    const { source: _source, $schema: _$schema, openapi: _openapi, operationId: _operationId, path: _path, method: _method, tags: _tags, ...rest } = normalized.metadata;
     normalized.metadata = Object.keys(rest).length > 0 ? rest : undefined;
   }
 

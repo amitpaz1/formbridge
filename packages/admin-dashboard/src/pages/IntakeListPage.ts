@@ -39,7 +39,7 @@ export function IntakeListPage({
     "div",
     { className: "fb-page" },
     createElement("h1", { className: "fb-page__title" }, "Intakes"),
-    createElement(DataTable, {
+    createElement(DataTable<IntakeSummary>, {
       data: intakes,
       columns,
       keyAccessor: (r: IntakeSummary) => r.intakeId,

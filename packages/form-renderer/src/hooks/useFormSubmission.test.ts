@@ -14,7 +14,7 @@ import {
   SubmitResponse,
   UseValidationReturn,
 } from '../types';
-import { IntakeError, ValidationResult } from '../types/error';
+import { IntakeError } from '../types/error';
 
 describe('useFormSubmission', () => {
   let mockFetch: ReturnType<typeof vi.fn>;

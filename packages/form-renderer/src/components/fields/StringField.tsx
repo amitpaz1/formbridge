@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { StringFieldProps } from '../../types';
+import type { StringFieldProps } from '../../types';
 import { FieldWrapper } from '../FieldWrapper';
 
 /**

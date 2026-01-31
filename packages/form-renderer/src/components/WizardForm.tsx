@@ -6,7 +6,7 @@
  */
 
 import React from "react";
-import type { StepDefinition, StepFieldSchema } from "../../../../src/core/step-validator.js";
+import type { StepDefinition, StepFieldSchema } from "../core/step-validator.js";
 import { useWizardNavigation } from "../hooks/useWizardNavigation.js";
 import { StepIndicator } from "./StepIndicator.js";
 
@@ -41,7 +41,9 @@ export function WizardForm({
       setErrors(result.errors.map((e) => ({ field: e.field, message: e.message })));
     } else {
       setErrors([]);
-      onStepComplete?.(state.currentStep.id);
+      if (state.currentStep) {
+        onStepComplete?.(state.currentStep.id);
+      }
       if (state.isLast) {
         onComplete?.();
       } else {

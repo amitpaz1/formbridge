@@ -18,10 +18,10 @@ import {
   generateToolName,
   parseToolName,
   type ToolGenerationOptions,
-  type GeneratedTools,
+  type GeneratedTools as _GeneratedTools,
 } from '../../src/mcp/tool-generator';
 import type { IntakeDefinition } from '../../src/schemas/intake-schema';
-import type { MCPToolDefinition, ToolOperation } from '../../src/types/mcp-types';
+import type { MCPToolDefinition as _MCPToolDefinition, ToolOperation } from '../../src/types/mcp-types';
 
 describe('generateToolsFromIntake', () => {
   describe('basic tool generation', () => {

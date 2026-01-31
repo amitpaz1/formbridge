@@ -15,7 +15,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createFormBridgeApp, createFormBridgeAppWithIntakes } from '../src/index.js';
-import type { IntakeDefinition, JSONSchema } from '../src/types.js';
+import type { IntakeDefinition, JSONSchema as _JSONSchema } from '../src/types.js';
 
 /**
  * Sample vendor onboarding intake definition for testing
@@ -946,7 +946,7 @@ describe('Metadata and Audit Trail', () => {
         fields: { name: 'Test' },
       }),
     });
-    const updateBody = await updateRes.json();
+    const _updateBody = await updateRes.json();
 
     const getRes = await app.request(`/intake/simple-contact/submissions/${createBody.submissionId}`);
     const getBody = await getRes.json();

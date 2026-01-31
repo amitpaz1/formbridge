@@ -4,7 +4,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { CliArgs, SchemaFormat, InterfaceType } from "./cli-args.js";
+import type { CliArgs, SchemaFormat } from "./cli-args.js";
 import {
   renderTemplate,
   toCamelCase,

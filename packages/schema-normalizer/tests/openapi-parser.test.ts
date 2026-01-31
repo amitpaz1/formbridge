@@ -16,10 +16,10 @@
 
 import { describe, it, expect } from 'vitest';
 import { OpenAPIParser } from '../src/parsers/openapi-parser';
-import type { OpenAPIDocument, OpenAPIParserOptions } from '../src/parsers/openapi-parser';
-import type { JSONSchema } from '../src/parsers/json-schema-parser';
+import type { OpenAPIDocument, OpenAPIParserOptions as _OpenAPIParserOptions } from '../src/parsers/openapi-parser';
+import type { JSONSchema as _JSONSchema } from '../src/parsers/json-schema-parser';
 import type {
-  IntakeSchema,
+  IntakeSchema as _IntakeSchema,
   ObjectField,
   StringField,
   NumberField,
