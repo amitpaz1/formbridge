@@ -271,7 +271,7 @@ export class S3StorageBackend implements StorageBackend {
     }
 
     // Check expiration
-    if (new Date(metadata.expiresAt) < new Date() && metadata.status === 'pending') {
+    if (metadata.status === 'expired' || (new Date(metadata.expiresAt) < new Date() && metadata.status !== 'completed')) {
       metadata.status = 'expired';
       this.uploads.set(uploadId, metadata);
       return {
@@ -323,7 +323,7 @@ export class S3StorageBackend implements StorageBackend {
       this.uploads.set(uploadId, metadata);
 
       // Ensure required properties are set before returning
-      if (!metadata.size || !metadata.uploadedAt) {
+      if (metadata.size == null || !metadata.uploadedAt) {
         throw new Error(`Upload metadata incomplete for ${uploadId}`);
       }
 
@@ -363,7 +363,7 @@ export class S3StorageBackend implements StorageBackend {
   async getUploadMetadata(uploadId: string): Promise<UploadedFile | undefined> {
     const metadata = this.uploads.get(uploadId);
 
-    if (!metadata || metadata.status !== 'completed' || !metadata.size) {
+    if (!metadata || metadata.status !== 'completed' || metadata.size == null) {
       return undefined;
     }
 
