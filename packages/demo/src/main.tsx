@@ -5,7 +5,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { App } from './App';
-import '@formbridge/form-renderer/dist/styles/default.css';
+import '../../form-renderer/src/styles/default.css';
 import './styles.css';
 
 // Get root element
