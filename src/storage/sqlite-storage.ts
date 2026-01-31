@@ -95,8 +95,8 @@ class SqliteSubmissionStorage implements SubmissionStorage {
     filter: SubmissionFilter,
     pagination?: PaginationOptions
   ): Promise<PaginatedResult<Submission>> {
-    let whereClauses: string[] = [];
-    let params: unknown[] = [];
+    const whereClauses: string[] = [];
+    const params: unknown[] = [];
 
     if (filter.intakeId) {
       whereClauses.push("intakeId = ?");
@@ -207,8 +207,8 @@ class SqliteEventStore implements EventStore {
     submissionId: string,
     filters?: EventFilters
   ): Promise<IntakeEvent[]> {
-    let whereClauses = ["submissionId = ?"];
-    let params: unknown[] = [submissionId];
+    const whereClauses = ["submissionId = ?"];
+    const params: unknown[] = [submissionId];
 
     if (filters?.types && filters.types.length > 0) {
       const placeholders = filters.types.map(() => "?").join(",");
