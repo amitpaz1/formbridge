@@ -159,7 +159,7 @@ export class IntakeRegistry {
    */
   getSchema(intakeId: string): JSONSchema {
     const intake = this.getIntake(intakeId);
-    return intake.schema;
+    return intake.schema as JSONSchema;
   }
 
   /**
@@ -278,7 +278,7 @@ export class IntakeRegistry {
 
     // Validate retry policy if present
     if (destination.retryPolicy) {
-      const policy = destination.retryPolicy;
+      const policy = destination.retryPolicy as Record<string, unknown>;
       if (typeof policy.maxAttempts !== 'number' || policy.maxAttempts < 0) {
         throw new IntakeValidationError(
           intakeId,
@@ -348,7 +348,7 @@ export class IntakeRegistry {
         throw new IntakeValidationError(intakeId, 'uiHints.steps must be an array');
       }
 
-      for (const step of uiHints.steps) {
+      for (const step of uiHints.steps as Record<string, unknown>[]) {
         if (!step.id || typeof step.id !== 'string') {
           throw new IntakeValidationError(intakeId, 'each step must have an id string');
         }

@@ -114,9 +114,20 @@ export function createCorsMiddleware(options?: CorsOptions): MiddlewareHandler {
     maxAge = 86400, // 24 hours
   } = options ?? {};
 
+  // Adapt origin function to match Hono's expected signature
+  // Our CorsOptions allows (origin, c) => boolean | string,
+  // but Hono expects (origin, c) => string | null | undefined
+  const adaptedOrigin = typeof origin === 'function'
+    ? (o: string, c: Context) => {
+        const result = origin(o, c);
+        if (typeof result === 'boolean') return result ? o : undefined;
+        return result;
+      }
+    : origin;
+
   // Use Hono's built-in CORS middleware with our configuration
   return honoCors({
-    origin,
+    origin: adaptedOrigin,
     allowMethods,
     allowHeaders,
     exposeHeaders,

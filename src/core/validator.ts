@@ -175,9 +175,11 @@ export class Validator {
         if (!isPresent) {
           missingFields.push(field);
           errors.push({
+            field,
+            type: 'missing',
+            message: `Field '${field}' is required`,
             path: field,
             code: 'required',
-            message: `Field '${field}' is required`,
             expected: 'a value',
             received: value,
           });
@@ -236,9 +238,11 @@ export class Validator {
         if (isRequired) {
           missingFields.push(fieldPath);
           errors.push({
+            field: fieldPath,
+            type: 'upload_pending',
+            message: `File upload required for '${fieldPath}'`,
             path: fieldPath,
             code: 'file_required',
-            message: `File upload required for '${fieldPath}'`,
             expected: 'a completed file upload',
             received: undefined,
           });
@@ -252,9 +256,11 @@ export class Validator {
           if (isRequired) {
             missingFields.push(fieldPath);
             errors.push({
+              field: fieldPath,
+              type: 'upload_pending',
+              message: `File upload for '${fieldPath}' is still pending`,
               path: fieldPath,
               code: 'file_required',
-              message: `File upload for '${fieldPath}' is still pending`,
               expected: 'a completed file upload',
               received: 'pending upload',
             });
@@ -262,9 +268,11 @@ export class Validator {
         } else if (upload.status === 'failed') {
           invalidFields.push(fieldPath);
           errors.push({
+            field: fieldPath,
+            type: 'invalid',
+            message: `File upload for '${fieldPath}' failed`,
             path: fieldPath,
             code: 'file_required',
-            message: `File upload for '${fieldPath}' failed`,
             expected: 'a completed file upload',
             received: 'failed upload',
           });
@@ -327,9 +335,11 @@ export class Validator {
     // Check file size constraint
     if (fieldSchema.maxSize && upload.sizeBytes > fieldSchema.maxSize) {
       errors.push({
+        field: fieldPath,
+        type: 'invalid',
+        message: `File '${upload.filename}' is too large (maximum: ${fieldSchema.maxSize} bytes)`,
         path: fieldPath,
         code: 'file_too_large',
-        message: `File '${upload.filename}' is too large (maximum: ${fieldSchema.maxSize} bytes)`,
         expected: `<= ${fieldSchema.maxSize} bytes`,
         received: `${upload.sizeBytes} bytes`,
       });
@@ -339,9 +349,11 @@ export class Validator {
     if (fieldSchema.allowedTypes && Array.isArray(fieldSchema.allowedTypes)) {
       if (!fieldSchema.allowedTypes.includes(upload.mimeType)) {
         errors.push({
+          field: fieldPath,
+          type: 'invalid',
+          message: `File '${upload.filename}' has invalid type (allowed: ${fieldSchema.allowedTypes.join(', ')})`,
           path: fieldPath,
           code: 'file_wrong_type',
-          message: `File '${upload.filename}' has invalid type (allowed: ${fieldSchema.allowedTypes.join(', ')})`,
           expected: fieldSchema.allowedTypes,
           received: upload.mimeType,
         });
@@ -402,9 +414,9 @@ export class Validator {
 
       // Track missing vs invalid fields
       if (fieldError.code === 'required') {
-        missingFields.push(fieldError.path);
+        missingFields.push(fieldError.path ?? fieldError.field);
       } else {
-        invalidFields.push(fieldError.path);
+        invalidFields.push(fieldError.path ?? fieldError.field);
       }
     }
 
@@ -421,10 +433,13 @@ export class Validator {
     // Determine error code and message based on Ajv error keyword
     const { code, message, expected, received } = this.mapAjvErrorToFieldError(error);
 
+    const fieldPath = path || this.extractFieldFromError(error);
     return {
-      path: path || this.extractFieldFromError(error),
-      code,
+      field: fieldPath,
       message,
+      type: code === 'required' ? 'missing' : 'invalid',
+      path: fieldPath,
+      code,
       expected,
       received,
     };
@@ -560,11 +575,12 @@ export class Validator {
     const processedFields = new Set<string>();
 
     for (const error of errors) {
+      const errorPath = error.path ?? error.field;
       // Avoid duplicate actions for the same field
-      if (processedFields.has(error.path)) {
+      if (processedFields.has(errorPath)) {
         continue;
       }
-      processedFields.add(error.path);
+      processedFields.add(errorPath);
 
       // Determine the appropriate action based on error code
       const action = this.determineAction(error, schema);
@@ -580,7 +596,8 @@ export class Validator {
    * Determines the appropriate NextAction for a field error.
    */
   private determineAction(error: FieldError, schema: JSONSchema): NextAction | null {
-    const fieldSchema = this.getFieldSchema(error.path, schema);
+    const errorPath = error.path ?? error.field;
+    const fieldSchema = this.getFieldSchema(errorPath, schema);
 
     // Check if this is a file field (format: 'binary' or file-specific errors)
     const isFileField =
@@ -593,28 +610,28 @@ export class Validator {
       // File upload field
       return {
         action: 'request_upload',
-        field: error.path,
-        hint: `Upload a file for '${error.path}'`,
+        field: errorPath,
+        hint: `Upload a file for '${errorPath}'`,
         accept: fieldSchema?.allowedTypes,
         maxBytes: fieldSchema?.maxSize,
       };
     }
 
     // Default: collect the field value
-    let hint = `Please provide a value for '${error.path}'`;
+    let hint = `Please provide a value for '${errorPath}'`;
 
     // Add more specific hints based on error type
     if (error.code === 'invalid_type' && error.expected) {
-      hint = `Please provide a ${error.expected} value for '${error.path}'`;
+      hint = `Please provide a ${error.expected} value for '${errorPath}'`;
     } else if (error.code === 'invalid_format' && typeof error.expected === 'string') {
-      hint = `Please provide a value matching ${error.expected} for '${error.path}'`;
+      hint = `Please provide a value matching ${error.expected} for '${errorPath}'`;
     } else if (error.code === 'invalid_value' && Array.isArray(error.expected)) {
-      hint = `Please select one of: ${error.expected.join(', ')} for '${error.path}'`;
+      hint = `Please select one of: ${error.expected.join(', ')} for '${errorPath}'`;
     }
 
     return {
       action: 'collect_field',
-      field: error.path,
+      field: errorPath,
       hint,
     };
   }

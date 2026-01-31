@@ -13,9 +13,9 @@ import {
   isFormBridgeApiKey,
   type ApiKeyStore,
 } from "./api-key-auth.js";
-import { OAuthProvider, type TokenValidationResult } from "./oauth-provider.js";
+import { OAuthProvider } from "./oauth-provider.js";
 import { type Role, hasPermission, type Permission } from "./rbac.js";
-import { RateLimiter, type RateLimitResult } from "./rate-limiter.js";
+import { RateLimiter } from "./rate-limiter.js";
 
 // =============================================================================
 // § Types

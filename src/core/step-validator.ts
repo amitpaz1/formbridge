@@ -127,7 +127,7 @@ export function getNextStep(
   if (currentIndex === -1 || currentIndex >= visibleSteps.length - 1) {
     return null;
   }
-  return visibleSteps[currentIndex + 1];
+  return visibleSteps[currentIndex + 1] ?? null;
 }
 
 /**
@@ -143,5 +143,5 @@ export function getPreviousStep(
   if (currentIndex <= 0) {
     return null;
   }
-  return visibleSteps[currentIndex - 1];
+  return visibleSteps[currentIndex - 1] ?? null;
 }

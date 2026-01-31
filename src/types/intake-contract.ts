@@ -89,6 +89,14 @@ export interface FieldError {
   type: IntakeErrorType;
   constraint?: string;
   value?: unknown;
+  /** Field path (used by validator for nested field references) */
+  path?: string;
+  /** Machine-readable error code from validator */
+  code?: string;
+  /** Expected value or constraint description */
+  expected?: unknown;
+  /** Actual received value */
+  received?: unknown;
 }
 
 /**
@@ -104,13 +112,17 @@ export type NextActionType =
   | "collect_field"
   | "request_upload"
   | "retry_delivery"
-  | "cancel";
+  | "cancel"
+  | "create"
+  | "validate";
 
 /**
  * Next action guidance for agent loops
  */
 export interface NextAction {
-  type: NextActionType;
+  type?: NextActionType;
+  /** Action name (alternative to type, used by validator/MCP server) */
+  action?: string;
   description?: string;
   field?: string;
   fields?: string[];
@@ -134,14 +146,16 @@ export interface ValidationErrorResponse {
 }
 
 /**
- * Structured error response envelope
+ * Structured error response envelope.
+ * Supports both the full envelope shape (ok, submissionId, error: {...})
+ * and the flat shape used by MCP server (type, fields, nextActions at top level).
  */
 export interface IntakeError {
-  ok: false;
-  submissionId: string;
-  state: SubmissionState;
-  resumeToken: string;
-  error: {
+  ok?: false;
+  submissionId?: string;
+  state?: SubmissionState;
+  resumeToken?: string;
+  error?: {
     type: IntakeErrorType;
     message?: string;
     fields?: FieldError[];
@@ -149,6 +163,12 @@ export interface IntakeError {
     retryable: boolean;
     retryAfterMs?: number;
   };
+  /** Flat shape fields (used by MCP server and error mapper) */
+  type?: IntakeErrorType | string;
+  message?: string;
+  fields?: FieldError[];
+  nextActions?: NextAction[];
+  timestamp?: string;
 }
 
 /**
@@ -346,12 +366,14 @@ export interface SubmissionSuccess {
   actor?: Actor;
   /** Timestamp of submission */
   timestamp?: string;
+  /** Resume token for continuing the submission */
+  resumeToken?: string;
 }
 
 /**
- * Submission response - either success or error
+ * Submission response - either success, structured error, or validation error
  */
-export type SubmissionResponse = SubmissionSuccess | IntakeError;
+export type SubmissionResponse = SubmissionSuccess | IntakeError | ValidationErrorResponse;
 
 /**
  * Type guard to check if a response is an IntakeError

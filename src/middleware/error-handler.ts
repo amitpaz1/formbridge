@@ -12,7 +12,8 @@
  * Based on INTAKE_CONTRACT_SPEC.md §3 (Error Schema)
  */
 
-import type { Context, MiddlewareHandler } from 'hono';
+import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HTTPException } from 'hono/http-exception';
 import type { IntakeError, SubmissionState } from '../types.js';
 import {
@@ -42,7 +43,7 @@ export class SubmissionError extends Error {
     public submissionId: string,
     public state: SubmissionState,
     public resumeToken: string,
-    public intakeError: IntakeError['error']
+    public intakeError: NonNullable<IntakeError['error']>
   ) {
     super(intakeError.message || 'Submission error');
     this.name = 'SubmissionError';
@@ -226,7 +227,7 @@ export function createErrorHandler(options?: {
       (errorResponse.error as any).stack = err.stack;
     }
 
-    return c.json(errorResponse, statusCode);
+    return c.json(errorResponse, statusCode as ContentfulStatusCode);
   };
 }
 
@@ -271,7 +272,7 @@ export function createSubmissionError(
   submissionId: string,
   state: SubmissionState,
   resumeToken: string,
-  errorDetails: IntakeError['error']
+  errorDetails: NonNullable<IntakeError['error']>
 ): SubmissionError {
   return new SubmissionError(submissionId, state, resumeToken, errorDetails);
 }

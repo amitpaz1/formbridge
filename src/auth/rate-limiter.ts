@@ -53,7 +53,7 @@ export class RateLimiter {
 
     const remaining = Math.max(0, this.config.maxRequests - activeTimestamps.length);
     const resetAt = activeTimestamps.length > 0
-      ? activeTimestamps[0] + this.config.windowMs
+      ? activeTimestamps[0]! + this.config.windowMs
       : now + this.config.windowMs;
 
     if (activeTimestamps.length >= this.config.maxRequests) {

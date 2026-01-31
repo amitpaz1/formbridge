@@ -121,10 +121,22 @@ export class InMemorySubmissionStorage implements SubmissionStorage {
 // =============================================================================
 
 class NoopStorageBackend implements StorageBackend {
-  async generateUploadUrl(): Promise<any> {
+  async generateUploadUrl(): Promise<never> {
     throw new Error("File storage not configured");
   }
-  async verifyUpload(): Promise<any> {
+  async verifyUpload(): Promise<never> {
+    throw new Error("File storage not configured");
+  }
+  async getUploadMetadata(): Promise<undefined> {
+    throw new Error("File storage not configured");
+  }
+  async generateDownloadUrl(): Promise<undefined> {
+    throw new Error("File storage not configured");
+  }
+  async deleteUpload(): Promise<boolean> {
+    throw new Error("File storage not configured");
+  }
+  async cleanupExpired(): Promise<void> {
     throw new Error("File storage not configured");
   }
 }

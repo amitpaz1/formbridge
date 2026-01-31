@@ -264,7 +264,7 @@ class SqliteEventStore implements EventStore {
       ts: row.ts,
       version: row.version,
       actor: JSON.parse(row.actor) as Actor,
-      state: row.state,
+      state: row.state as import("../types/intake-contract.js").SubmissionState,
       payload: row.payload ? JSON.parse(row.payload) : undefined,
     }));
   }
@@ -308,10 +308,22 @@ class SqliteEventStore implements EventStore {
 // =============================================================================
 
 class NoopStorageBackend implements StorageBackend {
-  async generateUploadUrl(): Promise<any> {
+  async generateUploadUrl(): Promise<never> {
     throw new Error("File storage not configured for SQLite backend");
   }
-  async verifyUpload(): Promise<any> {
+  async verifyUpload(): Promise<never> {
+    throw new Error("File storage not configured for SQLite backend");
+  }
+  async getUploadMetadata(): Promise<undefined> {
+    throw new Error("File storage not configured for SQLite backend");
+  }
+  async generateDownloadUrl(): Promise<undefined> {
+    throw new Error("File storage not configured for SQLite backend");
+  }
+  async deleteUpload(): Promise<boolean> {
+    throw new Error("File storage not configured for SQLite backend");
+  }
+  async cleanupExpired(): Promise<void> {
     throw new Error("File storage not configured for SQLite backend");
   }
 }
@@ -333,11 +345,9 @@ export class SqliteStorage implements FormBridgeStorage {
   files: StorageBackend;
   private db: Database | null = null;
   private dbPath: string;
-  private fileStorage?: StorageBackend;
 
   constructor(options: SqliteStorageOptions) {
     this.dbPath = options.dbPath;
-    this.fileStorage = options.fileStorage;
 
     // Initialize with placeholder — real init happens in initialize()
     this.submissions = null as any;
@@ -349,6 +359,7 @@ export class SqliteStorage implements FormBridgeStorage {
     // Dynamic import of better-sqlite3 (optional peer dependency)
     let BetterSqlite3: any;
     try {
+      // @ts-expect-error better-sqlite3 is an optional peer dependency
       BetterSqlite3 = (await import("better-sqlite3")).default;
     } catch {
       throw new Error(

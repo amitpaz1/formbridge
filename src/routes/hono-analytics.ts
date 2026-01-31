@@ -83,7 +83,7 @@ export function createHonoAnalyticsRouter(
     for (const event of createdEvents) {
       const dateKey = event.ts.slice(0, 10);
       if (dateKey in volumeMap) {
-        volumeMap[dateKey]++;
+        volumeMap[dateKey] = (volumeMap[dateKey] ?? 0) + 1;
       }
     }
 

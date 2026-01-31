@@ -10,7 +10,6 @@
  */
 
 import type { Submission } from "../types.js";
-import type { IntakeEvent } from "../types/intake-contract.js";
 import type { EventStore } from "../core/event-store.js";
 import type { StorageBackend } from "./storage-backend.js";
 

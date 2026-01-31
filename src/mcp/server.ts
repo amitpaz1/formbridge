@@ -107,8 +107,9 @@ export class FormBridgeMCPServer {
    * @param intake - The intake definition to register
    */
   registerIntake(intake: IntakeDefinition): void {
-    // Generate tools for this intake
-    const tools = generateToolsFromIntake(intake);
+    // Generate tools for this intake (cast needed because schema IntakeDefinition
+    // has slightly different ApprovalGate shape than contract IntakeDefinition)
+    const tools = generateToolsFromIntake(intake as unknown as import('../types/intake-contract.js').IntakeDefinition);
 
     // Store the intake and tools
     this.intakes.set(intake.id, intake);
