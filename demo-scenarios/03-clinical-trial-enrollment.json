@@ -1,0 +1,445 @@
+{
+  "id": "clinical-trial-enrollment",
+  "version": "1.0.0",
+  "name": "Clinical Trial Patient Enrollment",
+  "description": "Research coordinator AI screens patients from medical records and pre-fills eligibility data. Patient completes consent forms, self-reported symptoms, and uploads required documents.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "trialInfo": {
+        "type": "object",
+        "title": "Clinical Trial Details",
+        "properties": {
+          "trialId": {
+            "type": "string",
+            "title": "Trial Identifier",
+            "pattern": "^NCT[0-9]{8}$",
+            "description": "ClinicalTrials.gov identifier"
+          },
+          "trialName": { "type": "string", "title": "Trial Name" },
+          "phase": {
+            "type": "string",
+            "title": "Phase",
+            "enum": ["Phase I", "Phase II", "Phase IIa", "Phase IIb", "Phase III", "Phase IV"]
+          },
+          "principalInvestigator": { "type": "string", "title": "Principal Investigator" },
+          "site": { "type": "string", "title": "Study Site" },
+          "sponsor": { "type": "string", "title": "Sponsor" },
+          "irbApprovalNumber": { "type": "string", "title": "IRB Approval Number" }
+        },
+        "required": ["trialId", "trialName", "phase", "principalInvestigator", "site"]
+      },
+      "patientDemographics": {
+        "type": "object",
+        "title": "Patient Demographics",
+        "properties": {
+          "mrn": { "type": "string", "title": "Medical Record Number" },
+          "firstName": { "type": "string", "title": "First Name" },
+          "lastName": { "type": "string", "title": "Last Name" },
+          "dateOfBirth": { "type": "string", "title": "Date of Birth", "format": "date" },
+          "age": { "type": "integer", "title": "Age", "minimum": 18, "maximum": 120 },
+          "sex": {
+            "type": "string",
+            "title": "Biological Sex",
+            "enum": ["male", "female", "intersex"]
+          },
+          "gender": { "type": "string", "title": "Gender Identity" },
+          "ethnicity": {
+            "type": "string",
+            "title": "Ethnicity",
+            "enum": ["hispanic-latino", "not-hispanic-latino", "unknown", "prefer-not-to-say"]
+          },
+          "race": {
+            "type": "array",
+            "title": "Race (select all that apply)",
+            "items": {
+              "type": "string",
+              "enum": [
+                "american-indian-alaska-native",
+                "asian",
+                "black-african-american",
+                "native-hawaiian-pacific-islander",
+                "white",
+                "other",
+                "prefer-not-to-say"
+              ]
+            },
+            "minItems": 1
+          },
+          "primaryLanguage": { "type": "string", "title": "Primary Language" },
+          "contactPhone": { "type": "string", "title": "Phone" },
+          "contactEmail": { "type": "string", "title": "Email", "format": "email" },
+          "emergencyContact": {
+            "type": "object",
+            "title": "Emergency Contact",
+            "properties": {
+              "name": { "type": "string" },
+              "relationship": { "type": "string" },
+              "phone": { "type": "string" }
+            },
+            "required": ["name", "relationship", "phone"]
+          }
+        },
+        "required": ["firstName", "lastName", "dateOfBirth", "sex", "contactPhone", "emergencyContact"]
+      },
+      "eligibilityCriteria": {
+        "type": "object",
+        "title": "Eligibility Screening",
+        "description": "Inclusion/exclusion criteria assessed from medical records",
+        "properties": {
+          "primaryDiagnosis": {
+            "type": "object",
+            "title": "Primary Diagnosis",
+            "properties": {
+              "icd10Code": { "type": "string", "title": "ICD-10 Code" },
+              "diagnosisName": { "type": "string", "title": "Diagnosis" },
+              "diagnosisDate": { "type": "string", "title": "Date of Diagnosis", "format": "date" },
+              "stage": {
+                "type": "string",
+                "title": "Disease Stage",
+                "enum": ["Stage I", "Stage II", "Stage IIA", "Stage IIB", "Stage III", "Stage IIIA", "Stage IIIB", "Stage IV", "N/A"]
+              },
+              "histology": { "type": "string", "title": "Histology / Subtype" }
+            },
+            "required": ["icd10Code", "diagnosisName", "diagnosisDate"]
+          },
+          "priorTreatments": {
+            "type": "array",
+            "title": "Prior Treatments",
+            "items": {
+              "type": "object",
+              "properties": {
+                "treatmentType": {
+                  "type": "string",
+                  "enum": ["surgery", "chemotherapy", "radiation", "immunotherapy", "targeted-therapy", "hormone-therapy", "other"]
+                },
+                "regimen": { "type": "string", "title": "Regimen / Protocol" },
+                "startDate": { "type": "string", "format": "date" },
+                "endDate": { "type": "string", "format": "date" },
+                "outcome": {
+                  "type": "string",
+                  "enum": ["complete-response", "partial-response", "stable-disease", "progressive-disease", "not-evaluated"]
+                },
+                "reasonDiscontinued": { "type": "string" }
+              },
+              "required": ["treatmentType", "startDate"]
+            }
+          },
+          "labValues": {
+            "type": "object",
+            "title": "Recent Lab Values",
+            "description": "Within last 14 days",
+            "properties": {
+              "labDate": { "type": "string", "format": "date" },
+              "hemoglobin": { "type": "number", "title": "Hemoglobin (g/dL)", "minimum": 0 },
+              "platelets": { "type": "integer", "title": "Platelets (×10³/µL)", "minimum": 0 },
+              "anc": { "type": "number", "title": "ANC (×10³/µL)", "minimum": 0 },
+              "creatinine": { "type": "number", "title": "Creatinine (mg/dL)", "minimum": 0 },
+              "alt": { "type": "integer", "title": "ALT (U/L)", "minimum": 0 },
+              "ast": { "type": "integer", "title": "AST (U/L)", "minimum": 0 },
+              "totalBilirubin": { "type": "number", "title": "Total Bilirubin (mg/dL)", "minimum": 0 },
+              "ecogStatus": {
+                "type": "integer",
+                "title": "ECOG Performance Status",
+                "minimum": 0,
+                "maximum": 5
+              }
+            },
+            "required": ["labDate", "hemoglobin", "platelets", "creatinine"]
+          },
+          "exclusionChecklist": {
+            "type": "object",
+            "title": "Exclusion Criteria",
+            "properties": {
+              "activeInfection": { "type": "boolean", "title": "Active uncontrolled infection?", "default": false },
+              "autoimmune": { "type": "boolean", "title": "Active autoimmune disease requiring systemic treatment?", "default": false },
+              "brainMetastases": { "type": "boolean", "title": "Untreated brain metastases?", "default": false },
+              "organTransplant": { "type": "boolean", "title": "Prior organ transplant?", "default": false },
+              "pregnant": { "type": "boolean", "title": "Pregnant or breastfeeding?", "default": false },
+              "otherActiveMalignancy": { "type": "boolean", "title": "Other active malignancy in last 3 years?", "default": false },
+              "priorTherapyWithSameTarget": { "type": "boolean", "title": "Prior therapy with same mechanism of action?", "default": false },
+              "cardiacHistory": {
+                "type": "object",
+                "title": "Cardiac History",
+                "properties": {
+                  "myocardialInfarction6mo": { "type": "boolean", "default": false },
+                  "unstableAngina": { "type": "boolean", "default": false },
+                  "nyhaClassIIIorIV": { "type": "boolean", "default": false },
+                  "qtcProlongation": { "type": "boolean", "title": "QTc > 470ms?", "default": false }
+                }
+              }
+            }
+          },
+          "eligibilityDetermination": {
+            "type": "string",
+            "title": "Eligibility Determination",
+            "enum": ["eligible", "potentially-eligible-pending-review", "screen-failure"],
+            "description": "Agent's preliminary assessment based on available records"
+          },
+          "eligibilityNotes": { "type": "string", "title": "Notes on Eligibility" }
+        },
+        "required": ["primaryDiagnosis", "labValues", "exclusionChecklist"]
+      },
+      "patientSelfReport": {
+        "type": "object",
+        "title": "Patient Self-Reported Information",
+        "description": "Must be completed by the patient directly — human-only",
+        "properties": {
+          "currentSymptoms": {
+            "type": "array",
+            "title": "Current Symptoms",
+            "items": {
+              "type": "object",
+              "properties": {
+                "symptom": { "type": "string" },
+                "severity": { "type": "string", "enum": ["mild", "moderate", "severe"] },
+                "duration": { "type": "string" },
+                "impactOnDaily": {
+                  "type": "string",
+                  "enum": ["none", "minimal", "moderate", "significant", "debilitating"]
+                }
+              },
+              "required": ["symptom", "severity"]
+            }
+          },
+          "currentMedications": {
+            "type": "array",
+            "title": "Current Medications (including supplements)",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "dose": { "type": "string" },
+                "frequency": { "type": "string" },
+                "reason": { "type": "string" }
+              },
+              "required": ["name", "dose", "frequency"]
+            }
+          },
+          "allergies": {
+            "type": "array",
+            "title": "Known Allergies",
+            "items": {
+              "type": "object",
+              "properties": {
+                "allergen": { "type": "string" },
+                "reaction": { "type": "string" },
+                "severity": { "type": "string", "enum": ["mild", "moderate", "severe", "life-threatening"] }
+              },
+              "required": ["allergen", "reaction"]
+            }
+          },
+          "qualityOfLife": {
+            "type": "object",
+            "title": "Quality of Life Assessment (EQ-5D-5L)",
+            "properties": {
+              "mobility": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "selfCare": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "usualActivities": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "painDiscomfort": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "anxietyDepression": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "overallHealthVAS": {
+                "type": "integer",
+                "title": "Overall Health (0-100 scale)",
+                "minimum": 0,
+                "maximum": 100
+              }
+            },
+            "required": ["mobility", "selfCare", "usualActivities", "painDiscomfort", "anxietyDepression", "overallHealthVAS"]
+          },
+          "transportationNeeds": {
+            "type": "string",
+            "title": "Will you need transportation assistance for study visits?",
+            "enum": ["no", "sometimes", "every-visit"]
+          },
+          "preferredContactTime": {
+            "type": "string",
+            "title": "Preferred time for study team to contact you",
+            "enum": ["morning", "afternoon", "evening", "anytime"]
+          }
+        },
+        "required": ["currentSymptoms", "currentMedications", "qualityOfLife"]
+      },
+      "informedConsent": {
+        "type": "object",
+        "title": "Informed Consent",
+        "description": "Patient must read, understand, and sign — strictly human-only",
+        "properties": {
+          "consentVersion": { "type": "string", "title": "Consent Form Version" },
+          "consentDate": { "type": "string", "title": "Date of Consent", "format": "date" },
+          "understoodPurpose": { "type": "boolean", "title": "I understand the purpose of this research study", "const": true },
+          "understoodProcedures": { "type": "boolean", "title": "I understand the procedures involved", "const": true },
+          "understoodRisks": { "type": "boolean", "title": "I understand the potential risks and discomforts", "const": true },
+          "understoodBenefits": { "type": "boolean", "title": "I understand the potential benefits", "const": true },
+          "understoodAlternatives": { "type": "boolean", "title": "I understand the alternatives to participation", "const": true },
+          "understoodVoluntary": { "type": "boolean", "title": "I understand participation is voluntary and I may withdraw at any time", "const": true },
+          "understoodConfidentiality": { "type": "boolean", "title": "I understand how my information will be kept confidential", "const": true },
+          "understoodCosts": { "type": "boolean", "title": "I understand any costs or compensation associated with the study", "const": true },
+          "consentToParticipate": { "type": "boolean", "title": "I voluntarily consent to participate in this study", "const": true },
+          "consentToBiospecimens": {
+            "type": "boolean",
+            "title": "I consent to the collection and storage of biospecimens",
+            "description": "Optional — can decline and still participate"
+          },
+          "consentToFutureResearch": {
+            "type": "boolean",
+            "title": "I consent to use of my data/specimens in future research",
+            "description": "Optional"
+          },
+          "consentToGeneticTesting": {
+            "type": "boolean",
+            "title": "I consent to genetic/genomic testing as part of this study",
+            "description": "Optional"
+          },
+          "patientSignature": {
+            "type": "string",
+            "title": "Patient Signature (type full legal name)"
+          },
+          "patientSignatureDate": { "type": "string", "format": "date" },
+          "witnessName": { "type": "string", "title": "Witness Name" },
+          "witnessSignature": { "type": "string", "title": "Witness Signature" },
+          "witnessSignatureDate": { "type": "string", "format": "date" },
+          "questionsAsked": {
+            "type": "string",
+            "title": "Questions asked by patient during consent discussion",
+            "description": "Document any questions the patient raised"
+          }
+        },
+        "required": [
+          "consentVersion", "consentDate",
+          "understoodPurpose", "understoodProcedures", "understoodRisks",
+          "understoodBenefits", "understoodAlternatives", "understoodVoluntary",
+          "understoodConfidentiality", "understoodCosts",
+          "consentToParticipate", "patientSignature", "patientSignatureDate"
+        ]
+      },
+      "documents": {
+        "type": "object",
+        "title": "Required Documents",
+        "properties": {
+          "insuranceCard": {
+            "type": "string",
+            "title": "Insurance Card (front & back)",
+            "format": "uri"
+          },
+          "governmentId": {
+            "type": "string",
+            "title": "Government-Issued Photo ID",
+            "format": "uri"
+          },
+          "medicalRecordsRelease": {
+            "type": "string",
+            "title": "Signed Medical Records Release Form",
+            "format": "uri"
+          },
+          "referralLetter": {
+            "type": "string",
+            "title": "Referring Physician Letter",
+            "format": "uri"
+          },
+          "externalLabResults": {
+            "type": "array",
+            "title": "External Lab Results",
+            "items": { "type": "string", "format": "uri" },
+            "maxItems": 10
+          },
+          "pathologyReport": {
+            "type": "string",
+            "title": "Pathology Report",
+            "format": "uri"
+          }
+        },
+        "required": ["governmentId", "medicalRecordsRelease"]
+      }
+    },
+    "required": ["trialInfo", "patientDemographics", "eligibilityCriteria", "patientSelfReport", "informedConsent", "documents"]
+  },
+  "agentPreFill": {
+    "_description": "Research coordinator AI pulls from EMR (electronic medical records) and trial database",
+    "trialInfo": {
+      "trialId": "NCT05847291",
+      "trialName": "BEACON-3: Pembrolizumab + Novel TKI Combination in Advanced NSCLC",
+      "phase": "Phase III",
+      "principalInvestigator": "Dr. Elena Rodriguez, MD, PhD",
+      "site": "Memorial Cancer Center — San Francisco",
+      "sponsor": "Meridian Therapeutics, Inc.",
+      "irbApprovalNumber": "IRB-2025-0847"
+    },
+    "patientDemographics": {
+      "mrn": "MRN-00482916",
+      "firstName": "Robert",
+      "lastName": "Tanaka",
+      "dateOfBirth": "1962-08-14",
+      "age": 63,
+      "sex": "male",
+      "primaryLanguage": "English"
+    },
+    "eligibilityCriteria": {
+      "primaryDiagnosis": {
+        "icd10Code": "C34.1",
+        "diagnosisName": "Non-small cell lung cancer, upper lobe, right",
+        "diagnosisDate": "2025-06-20",
+        "stage": "Stage IIIB",
+        "histology": "Adenocarcinoma, PD-L1 TPS 60%"
+      },
+      "priorTreatments": [
+        {
+          "treatmentType": "chemotherapy",
+          "regimen": "Carboplatin + Pemetrexed (4 cycles)",
+          "startDate": "2025-08-01",
+          "endDate": "2025-11-15",
+          "outcome": "partial-response"
+        },
+        {
+          "treatmentType": "radiation",
+          "regimen": "Concurrent chemoradiation 60Gy/30fx",
+          "startDate": "2025-08-15",
+          "endDate": "2025-09-26",
+          "outcome": "partial-response"
+        }
+      ],
+      "labValues": {
+        "labDate": "2026-01-25",
+        "hemoglobin": 12.8,
+        "platelets": 245,
+        "anc": 3.2,
+        "creatinine": 0.9,
+        "alt": 28,
+        "ast": 31,
+        "totalBilirubin": 0.6,
+        "ecogStatus": 1
+      },
+      "exclusionChecklist": {
+        "activeInfection": false,
+        "autoimmune": false,
+        "brainMetastases": false,
+        "organTransplant": false,
+        "pregnant": false,
+        "otherActiveMalignancy": false,
+        "priorTherapyWithSameTarget": false,
+        "cardiacHistory": {
+          "myocardialInfarction6mo": false,
+          "unstableAngina": false,
+          "nyhaClassIIIorIV": false,
+          "qtcProlongation": false
+        }
+      },
+      "eligibilityDetermination": "potentially-eligible-pending-review",
+      "eligibilityNotes": "Patient meets all inclusion criteria. Labs within range. ECOG 1. No exclusion criteria triggered. Pending PI review and patient consent."
+    },
+    "informedConsent": {
+      "consentVersion": "v3.2 (2025-11-01)"
+    }
+  },
+  "humanRequired": [
+    "patientDemographics.emergencyContact — Patient provides their own emergency contact",
+    "patientDemographics.contactPhone/Email — Patient confirms their current info",
+    "patientDemographics.ethnicity/race — Self-identified by patient (federal requirement)",
+    "patientSelfReport (entire section) — Must come directly from the patient",
+    "informedConsent (entire section except version) — Patient must read, acknowledge each item, and sign",
+    "documents.governmentId — Patient uploads their ID",
+    "documents.medicalRecordsRelease — Patient signs and uploads",
+    "documents.insuranceCard — Patient uploads",
+    "patientSelfReport.qualityOfLife — Standardized patient-reported outcome measure"
+  ]
+}

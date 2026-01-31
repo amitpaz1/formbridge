@@ -1,0 +1,299 @@
+{
+  "id": "insurance-claim",
+  "version": "1.0.0",
+  "name": "Auto Insurance Claim",
+  "description": "File an auto insurance claim. Agent pre-fills policy details and accident summary from conversation; human uploads photos, signs declaration, and provides witness info.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "policyInfo": {
+        "type": "object",
+        "title": "Policy Information",
+        "description": "Insurance policy details (typically known by agent from account lookup)",
+        "properties": {
+          "policyNumber": {
+            "type": "string",
+            "title": "Policy Number",
+            "pattern": "^POL-[A-Z0-9]{8}$",
+            "description": "Your insurance policy number"
+          },
+          "policyholderName": {
+            "type": "string",
+            "title": "Policyholder Full Name"
+          },
+          "policyholderEmail": {
+            "type": "string",
+            "title": "Email Address",
+            "format": "email"
+          },
+          "policyholderPhone": {
+            "type": "string",
+            "title": "Phone Number"
+          },
+          "coverageType": {
+            "type": "string",
+            "title": "Coverage Type",
+            "enum": ["comprehensive", "collision", "liability", "uninsured-motorist"]
+          },
+          "deductible": {
+            "type": "number",
+            "title": "Deductible Amount ($)",
+            "minimum": 0
+          }
+        },
+        "required": ["policyNumber", "policyholderName", "policyholderEmail", "coverageType"]
+      },
+      "incidentDetails": {
+        "type": "object",
+        "title": "Incident Details",
+        "properties": {
+          "dateOfIncident": {
+            "type": "string",
+            "title": "Date of Incident",
+            "format": "date"
+          },
+          "timeOfIncident": {
+            "type": "string",
+            "title": "Approximate Time",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "location": {
+            "type": "object",
+            "title": "Incident Location",
+            "properties": {
+              "streetAddress": { "type": "string", "title": "Street / Intersection" },
+              "city": { "type": "string", "title": "City" },
+              "state": { "type": "string", "title": "State", "minLength": 2, "maxLength": 2 },
+              "zipCode": { "type": "string", "title": "ZIP Code" }
+            },
+            "required": ["streetAddress", "city", "state"]
+          },
+          "description": {
+            "type": "string",
+            "title": "What Happened",
+            "description": "Detailed description of the incident",
+            "minLength": 50,
+            "maxLength": 5000
+          },
+          "weatherConditions": {
+            "type": "string",
+            "title": "Weather Conditions",
+            "enum": ["clear", "rain", "snow", "fog", "ice", "other"]
+          },
+          "policeReportFiled": {
+            "type": "boolean",
+            "title": "Was a police report filed?"
+          },
+          "policeReportNumber": {
+            "type": "string",
+            "title": "Police Report Number",
+            "description": "Required if police report was filed"
+          }
+        },
+        "required": ["dateOfIncident", "location", "description"]
+      },
+      "vehicleInfo": {
+        "type": "object",
+        "title": "Your Vehicle",
+        "properties": {
+          "year": { "type": "integer", "title": "Year", "minimum": 1990, "maximum": 2027 },
+          "make": { "type": "string", "title": "Make" },
+          "model": { "type": "string", "title": "Model" },
+          "vin": {
+            "type": "string",
+            "title": "VIN",
+            "pattern": "^[A-HJ-NPR-Z0-9]{17}$",
+            "description": "17-character Vehicle Identification Number"
+          },
+          "licensePlate": { "type": "string", "title": "License Plate" },
+          "currentMileage": { "type": "integer", "title": "Current Mileage", "minimum": 0 },
+          "isDrivable": { "type": "boolean", "title": "Is the vehicle still drivable?" }
+        },
+        "required": ["year", "make", "model", "vin"]
+      },
+      "otherParty": {
+        "type": "object",
+        "title": "Other Party Information",
+        "description": "Details about the other driver/vehicle involved (if applicable)",
+        "properties": {
+          "involved": {
+            "type": "boolean",
+            "title": "Was another vehicle/party involved?"
+          },
+          "driverName": { "type": "string", "title": "Other Driver's Name" },
+          "driverPhone": { "type": "string", "title": "Other Driver's Phone" },
+          "insuranceCompany": { "type": "string", "title": "Their Insurance Company" },
+          "insurancePolicyNumber": { "type": "string", "title": "Their Policy Number" },
+          "vehicleDescription": { "type": "string", "title": "Their Vehicle (Year/Make/Model)" },
+          "licensePlate": { "type": "string", "title": "Their License Plate" }
+        }
+      },
+      "witnesses": {
+        "type": "array",
+        "title": "Witnesses",
+        "description": "People who witnessed the incident",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "title": "Witness Name" },
+            "phone": { "type": "string", "title": "Phone" },
+            "email": { "type": "string", "title": "Email", "format": "email" },
+            "relationship": {
+              "type": "string",
+              "title": "Relationship",
+              "enum": ["stranger", "passenger", "pedestrian", "nearby-driver", "other"]
+            }
+          },
+          "required": ["name"]
+        },
+        "maxItems": 5
+      },
+      "damageAssessment": {
+        "type": "object",
+        "title": "Damage Assessment",
+        "properties": {
+          "estimatedDamage": {
+            "type": "string",
+            "title": "Estimated Damage Range",
+            "enum": ["under-1000", "1000-5000", "5000-15000", "15000-30000", "over-30000", "total-loss"]
+          },
+          "damageDescription": {
+            "type": "string",
+            "title": "Describe the Damage",
+            "minLength": 20
+          },
+          "damagedAreas": {
+            "type": "array",
+            "title": "Damaged Areas of Vehicle",
+            "items": {
+              "type": "string",
+              "enum": ["front", "rear", "driver-side", "passenger-side", "roof", "hood", "trunk", "windshield", "undercarriage"]
+            },
+            "minItems": 1
+          },
+          "injuries": {
+            "type": "boolean",
+            "title": "Were there any injuries?"
+          },
+          "injuryDescription": {
+            "type": "string",
+            "title": "Describe Injuries",
+            "description": "Required if injuries occurred"
+          }
+        },
+        "required": ["estimatedDamage", "damageDescription", "damagedAreas"]
+      },
+      "documents": {
+        "type": "object",
+        "title": "Supporting Documents",
+        "description": "Upload photos and documents (human-only)",
+        "properties": {
+          "damagePhotos": {
+            "type": "array",
+            "title": "Damage Photos",
+            "description": "Upload photos of the damage from multiple angles",
+            "items": { "type": "string", "format": "uri" },
+            "minItems": 2,
+            "maxItems": 10
+          },
+          "scenePhotos": {
+            "type": "array",
+            "title": "Scene Photos",
+            "description": "Photos of the accident scene, road conditions, traffic signs",
+            "items": { "type": "string", "format": "uri" },
+            "maxItems": 5
+          },
+          "policeReport": {
+            "type": "string",
+            "title": "Police Report (PDF)",
+            "format": "uri"
+          },
+          "repairEstimate": {
+            "type": "string",
+            "title": "Repair Estimate (if available)",
+            "format": "uri"
+          }
+        },
+        "required": ["damagePhotos"]
+      },
+      "declaration": {
+        "type": "object",
+        "title": "Declaration",
+        "properties": {
+          "statementTruth": {
+            "type": "boolean",
+            "title": "I declare that the information provided is true and complete to the best of my knowledge",
+            "const": true
+          },
+          "electronicSignature": {
+            "type": "string",
+            "title": "Electronic Signature (type your full legal name)",
+            "minLength": 2
+          },
+          "signatureDate": {
+            "type": "string",
+            "title": "Date of Signature",
+            "format": "date"
+          }
+        },
+        "required": ["statementTruth", "electronicSignature", "signatureDate"]
+      }
+    },
+    "required": ["policyInfo", "incidentDetails", "vehicleInfo", "damageAssessment", "documents", "declaration"]
+  },
+  "agentPreFill": {
+    "_description": "What a typical agent fills from a phone conversation + policy lookup",
+    "policyInfo": {
+      "policyNumber": "POL-AX8F29KL",
+      "policyholderName": "Sarah Chen",
+      "policyholderEmail": "sarah.chen@email.com",
+      "policyholderPhone": "+1-555-0142",
+      "coverageType": "comprehensive",
+      "deductible": 500
+    },
+    "incidentDetails": {
+      "dateOfIncident": "2026-01-28",
+      "timeOfIncident": "17:30",
+      "location": {
+        "streetAddress": "Intersection of Oak Ave and 3rd Street",
+        "city": "Portland",
+        "state": "OR",
+        "zipCode": "97201"
+      },
+      "description": "Policyholder was driving eastbound on Oak Ave when another vehicle ran a red light at the 3rd Street intersection and struck the driver side of her vehicle. The other driver admitted fault at the scene. Airbags did not deploy. Police were called and a report was filed.",
+      "weatherConditions": "rain",
+      "policeReportFiled": true,
+      "policeReportNumber": "PPB-2026-004817"
+    },
+    "vehicleInfo": {
+      "year": 2023,
+      "make": "Toyota",
+      "model": "RAV4",
+      "vin": "2T3P1RFV5PW123456",
+      "licensePlate": "ABC-1234",
+      "isDrivable": true
+    },
+    "otherParty": {
+      "involved": true,
+      "driverName": "James Wilson"
+    },
+    "damageAssessment": {
+      "estimatedDamage": "5000-15000",
+      "damageDescription": "Significant dent and paint damage to the driver-side front door and fender. Side mirror broken. Driver door opens but with difficulty.",
+      "damagedAreas": ["driver-side", "front"],
+      "injuries": false
+    }
+  },
+  "humanRequired": [
+    "documents.damagePhotos — Must upload actual photos from their phone",
+    "documents.scenePhotos — Photos of the intersection",
+    "documents.policeReport — PDF from police department",
+    "declaration.statementTruth — Legal acknowledgment",
+    "declaration.electronicSignature — Must type their own name",
+    "declaration.signatureDate — Date of signing",
+    "witnesses — Details of anyone who saw the accident",
+    "otherParty (remaining fields) — Other driver's insurance info from the card they exchanged",
+    "vehicleInfo.currentMileage — Needs to check odometer",
+    "damageAssessment.damagedAreas — May need to verify/add areas after looking at car in daylight"
+  ]
+}

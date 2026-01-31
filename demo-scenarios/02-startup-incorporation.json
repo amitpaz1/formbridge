@@ -1,0 +1,435 @@
+{
+  "id": "startup-incorporation",
+  "version": "1.0.0",
+  "name": "Startup Incorporation & Registration",
+  "description": "AI legal assistant gathers company details during a consultation call and pre-fills the incorporation paperwork. Founders sign, upload IDs, and confirm equity splits.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "companyDetails": {
+        "type": "object",
+        "title": "Company Information",
+        "properties": {
+          "proposedNames": {
+            "type": "array",
+            "title": "Proposed Company Names (in order of preference)",
+            "items": { "type": "string", "minLength": 3 },
+            "minItems": 1,
+            "maxItems": 5
+          },
+          "entityType": {
+            "type": "string",
+            "title": "Entity Type",
+            "enum": ["c-corp", "s-corp", "llc", "benefit-corp", "pbc"]
+          },
+          "stateOfIncorporation": {
+            "type": "string",
+            "title": "State of Incorporation",
+            "enum": ["DE", "WY", "NV", "CA", "NY", "TX", "FL"]
+          },
+          "businessPurpose": {
+            "type": "string",
+            "title": "Business Purpose",
+            "description": "Brief description of the company's primary business activity",
+            "minLength": 20,
+            "maxLength": 500
+          },
+          "naicsCode": {
+            "type": "string",
+            "title": "NAICS Industry Code",
+            "pattern": "^[0-9]{6}$"
+          },
+          "fiscalYearEnd": {
+            "type": "string",
+            "title": "Fiscal Year End",
+            "enum": ["12/31", "03/31", "06/30", "09/30"]
+          },
+          "principalAddress": {
+            "type": "object",
+            "title": "Principal Business Address",
+            "properties": {
+              "street": { "type": "string" },
+              "suite": { "type": "string" },
+              "city": { "type": "string" },
+              "state": { "type": "string", "minLength": 2, "maxLength": 2 },
+              "zipCode": { "type": "string" },
+              "country": { "type": "string", "default": "US" }
+            },
+            "required": ["street", "city", "state", "zipCode"]
+          },
+          "registeredAgent": {
+            "type": "object",
+            "title": "Registered Agent",
+            "properties": {
+              "useService": {
+                "type": "boolean",
+                "title": "Use a registered agent service?",
+                "default": true
+              },
+              "agentName": { "type": "string", "title": "Agent Name" },
+              "agentAddress": { "type": "string", "title": "Agent Address" }
+            }
+          }
+        },
+        "required": ["proposedNames", "entityType", "stateOfIncorporation", "businessPurpose", "principalAddress"]
+      },
+      "founders": {
+        "type": "array",
+        "title": "Founders",
+        "description": "All founding members of the company",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fullLegalName": { "type": "string", "title": "Full Legal Name" },
+            "email": { "type": "string", "title": "Email", "format": "email" },
+            "phone": { "type": "string", "title": "Phone" },
+            "dateOfBirth": { "type": "string", "title": "Date of Birth", "format": "date" },
+            "ssn": {
+              "type": "string",
+              "title": "SSN (last 4 digits)",
+              "pattern": "^[0-9]{4}$",
+              "description": "Required for tax filings — human-only field"
+            },
+            "citizenship": { "type": "string", "title": "Country of Citizenship" },
+            "address": {
+              "type": "object",
+              "title": "Home Address",
+              "properties": {
+                "street": { "type": "string" },
+                "city": { "type": "string" },
+                "state": { "type": "string" },
+                "zipCode": { "type": "string" },
+                "country": { "type": "string" }
+              },
+              "required": ["street", "city", "state", "zipCode"]
+            },
+            "role": {
+              "type": "string",
+              "title": "Role / Title",
+              "enum": ["CEO", "CTO", "COO", "CFO", "President", "VP Engineering", "VP Product", "Board Member", "Advisor"]
+            },
+            "isDirector": { "type": "boolean", "title": "Will serve as Director?", "default": false },
+            "isOfficer": { "type": "boolean", "title": "Will serve as Officer?", "default": false }
+          },
+          "required": ["fullLegalName", "email", "role"]
+        },
+        "minItems": 1,
+        "maxItems": 10
+      },
+      "equityStructure": {
+        "type": "object",
+        "title": "Equity Structure",
+        "properties": {
+          "authorizedShares": {
+            "type": "integer",
+            "title": "Total Authorized Shares",
+            "default": 10000000,
+            "minimum": 1000
+          },
+          "parValue": {
+            "type": "number",
+            "title": "Par Value per Share ($)",
+            "default": 0.0001,
+            "minimum": 0.0001
+          },
+          "shareClasses": {
+            "type": "array",
+            "title": "Share Classes",
+            "items": {
+              "type": "object",
+              "properties": {
+                "className": {
+                  "type": "string",
+                  "title": "Class Name",
+                  "enum": ["Common", "Series Seed", "Series A Preferred"]
+                },
+                "authorizedShares": { "type": "integer", "title": "Authorized Shares" },
+                "votingRights": { "type": "boolean", "title": "Has Voting Rights", "default": true },
+                "liquidationPreference": {
+                  "type": "string",
+                  "title": "Liquidation Preference",
+                  "enum": ["none", "1x-non-participating", "1x-participating", "2x-non-participating"]
+                }
+              },
+              "required": ["className", "authorizedShares"]
+            },
+            "minItems": 1
+          },
+          "founderAllocations": {
+            "type": "array",
+            "title": "Founder Share Allocations",
+            "description": "How shares are split among founders — requires all founders to agree",
+            "items": {
+              "type": "object",
+              "properties": {
+                "founderName": { "type": "string", "title": "Founder Name" },
+                "shareClass": { "type": "string", "title": "Share Class" },
+                "numberOfShares": { "type": "integer", "title": "Number of Shares", "minimum": 1 },
+                "vestingSchedule": {
+                  "type": "string",
+                  "title": "Vesting Schedule",
+                  "enum": ["4yr-1yr-cliff", "4yr-no-cliff", "3yr-1yr-cliff", "immediate", "custom"]
+                },
+                "cliffMonths": { "type": "integer", "title": "Cliff (months)", "default": 12 },
+                "vestingMonths": { "type": "integer", "title": "Total Vesting (months)", "default": 48 },
+                "accelerationOnChange": {
+                  "type": "string",
+                  "title": "Acceleration on Change of Control",
+                  "enum": ["none", "single-trigger-100", "double-trigger-100", "single-trigger-50"]
+                }
+              },
+              "required": ["founderName", "shareClass", "numberOfShares", "vestingSchedule"]
+            }
+          },
+          "optionPool": {
+            "type": "object",
+            "title": "Employee Option Pool",
+            "properties": {
+              "reservePercentage": {
+                "type": "number",
+                "title": "Option Pool (%)",
+                "minimum": 0,
+                "maximum": 30,
+                "default": 10
+              },
+              "optionPlanType": {
+                "type": "string",
+                "title": "Option Plan Type",
+                "enum": ["iso", "nso", "rsu", "mixed"]
+              }
+            }
+          }
+        },
+        "required": ["authorizedShares", "shareClasses", "founderAllocations"]
+      },
+      "governanceDocuments": {
+        "type": "object",
+        "title": "Governance Preferences",
+        "properties": {
+          "boardSize": { "type": "integer", "title": "Initial Board Size", "minimum": 1, "maximum": 9 },
+          "boardMeetingFrequency": {
+            "type": "string",
+            "title": "Board Meeting Frequency",
+            "enum": ["monthly", "quarterly", "semi-annually", "annually"]
+          },
+          "restrictiveCovenants": {
+            "type": "object",
+            "title": "Founder Restrictions",
+            "properties": {
+              "nonCompeteMonths": { "type": "integer", "title": "Non-Compete (months)", "default": 12 },
+              "nonSolicitMonths": { "type": "integer", "title": "Non-Solicit (months)", "default": 24 },
+              "ipAssignment": {
+                "type": "boolean",
+                "title": "Founders assign all prior related IP to company?",
+                "default": true
+              }
+            }
+          },
+          "byLawsTemplate": {
+            "type": "string",
+            "title": "Bylaws Template",
+            "enum": ["standard-startup", "investor-friendly", "founder-friendly", "custom"]
+          }
+        }
+      },
+      "taxElections": {
+        "type": "object",
+        "title": "Tax Elections",
+        "properties": {
+          "section83b": {
+            "type": "boolean",
+            "title": "File 83(b) Elections for founders?",
+            "description": "Must be filed within 30 days — critical for tax savings",
+            "default": true
+          },
+          "sElection": {
+            "type": "boolean",
+            "title": "S-Corp Election (if applicable)?",
+            "default": false
+          },
+          "einApplication": {
+            "type": "boolean",
+            "title": "Apply for EIN (Employer Identification Number)?",
+            "default": true
+          },
+          "qualifiedSmallBusiness": {
+            "type": "boolean",
+            "title": "QSBS (Section 1202) Eligible?",
+            "description": "Potential capital gains exclusion up to $10M"
+          }
+        }
+      },
+      "documents": {
+        "type": "object",
+        "title": "Required Documents (human upload)",
+        "properties": {
+          "founderIds": {
+            "type": "array",
+            "title": "Government-Issued IDs for Each Founder",
+            "items": {
+              "type": "object",
+              "properties": {
+                "founderName": { "type": "string" },
+                "idType": { "type": "string", "enum": ["passport", "drivers-license", "state-id"] },
+                "idDocument": { "type": "string", "format": "uri", "title": "Upload ID scan" }
+              },
+              "required": ["founderName", "idType", "idDocument"]
+            },
+            "minItems": 1
+          },
+          "proofOfAddress": {
+            "type": "array",
+            "title": "Proof of Business Address",
+            "items": { "type": "string", "format": "uri" },
+            "maxItems": 3
+          },
+          "priorIpAgreements": {
+            "type": "array",
+            "title": "Existing IP/Employment Agreements",
+            "description": "Upload any existing agreements that might affect IP assignment",
+            "items": { "type": "string", "format": "uri" },
+            "maxItems": 10
+          }
+        },
+        "required": ["founderIds"]
+      },
+      "signatures": {
+        "type": "object",
+        "title": "Founder Signatures",
+        "description": "Each founder must sign — human-only",
+        "properties": {
+          "founderSignatures": {
+            "type": "array",
+            "title": "Signatures",
+            "items": {
+              "type": "object",
+              "properties": {
+                "founderName": { "type": "string" },
+                "signature": { "type": "string", "title": "Electronic Signature (type full legal name)" },
+                "signedDate": { "type": "string", "format": "date" },
+                "acknowledgesVesting": {
+                  "type": "boolean",
+                  "title": "Acknowledges and agrees to vesting schedule",
+                  "const": true
+                },
+                "acknowledgesIpAssignment": {
+                  "type": "boolean",
+                  "title": "Acknowledges and agrees to IP assignment",
+                  "const": true
+                }
+              },
+              "required": ["founderName", "signature", "signedDate", "acknowledgesVesting", "acknowledgesIpAssignment"]
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["founderSignatures"]
+      }
+    },
+    "required": ["companyDetails", "founders", "equityStructure", "documents", "signatures"]
+  },
+  "agentPreFill": {
+    "_description": "Agent fills from a 30-minute founder consultation call + public records lookup",
+    "companyDetails": {
+      "proposedNames": ["NeuralForge AI", "NeuralForge Labs", "NeuralForge Inc"],
+      "entityType": "c-corp",
+      "stateOfIncorporation": "DE",
+      "businessPurpose": "Development and commercialization of artificial intelligence software for automated code review and security analysis in enterprise software development pipelines.",
+      "naicsCode": "511210",
+      "fiscalYearEnd": "12/31",
+      "principalAddress": {
+        "street": "450 Townsend Street",
+        "suite": "Suite 300",
+        "city": "San Francisco",
+        "state": "CA",
+        "zipCode": "94107",
+        "country": "US"
+      },
+      "registeredAgent": {
+        "useService": true
+      }
+    },
+    "founders": [
+      {
+        "fullLegalName": "Priya Sharma",
+        "email": "priya@neuralforge.dev",
+        "phone": "+1-415-555-0198",
+        "citizenship": "US",
+        "role": "CEO",
+        "isDirector": true,
+        "isOfficer": true
+      },
+      {
+        "fullLegalName": "Marcus Chen",
+        "email": "marcus@neuralforge.dev",
+        "phone": "+1-415-555-0234",
+        "citizenship": "US",
+        "role": "CTO",
+        "isDirector": true,
+        "isOfficer": true
+      }
+    ],
+    "equityStructure": {
+      "authorizedShares": 10000000,
+      "parValue": 0.0001,
+      "shareClasses": [
+        {
+          "className": "Common",
+          "authorizedShares": 10000000,
+          "votingRights": true,
+          "liquidationPreference": "none"
+        }
+      ],
+      "founderAllocations": [
+        {
+          "founderName": "Priya Sharma",
+          "shareClass": "Common",
+          "numberOfShares": 4500000,
+          "vestingSchedule": "4yr-1yr-cliff",
+          "cliffMonths": 12,
+          "vestingMonths": 48,
+          "accelerationOnChange": "double-trigger-100"
+        },
+        {
+          "founderName": "Marcus Chen",
+          "shareClass": "Common",
+          "numberOfShares": 4500000,
+          "vestingSchedule": "4yr-1yr-cliff",
+          "cliffMonths": 12,
+          "vestingMonths": 48,
+          "accelerationOnChange": "double-trigger-100"
+        }
+      ],
+      "optionPool": {
+        "reservePercentage": 10,
+        "optionPlanType": "iso"
+      }
+    },
+    "governanceDocuments": {
+      "boardSize": 3,
+      "boardMeetingFrequency": "quarterly",
+      "restrictiveCovenants": {
+        "nonCompeteMonths": 12,
+        "nonSolicitMonths": 24,
+        "ipAssignment": true
+      },
+      "byLawsTemplate": "standard-startup"
+    },
+    "taxElections": {
+      "section83b": true,
+      "sElection": false,
+      "einApplication": true,
+      "qualifiedSmallBusiness": true
+    }
+  },
+  "humanRequired": [
+    "founders[*].dateOfBirth — Sensitive PII, not given to agent",
+    "founders[*].ssn — Last 4 digits, human must type directly",
+    "founders[*].address — Full home addresses, founders enter themselves",
+    "documents.founderIds — Must upload actual ID scans",
+    "documents.proofOfAddress — Utility bill or lease",
+    "documents.priorIpAgreements — Any existing employment/IP agreements",
+    "signatures.founderSignatures — Each founder signs individually",
+    "equityStructure.founderAllocations — Founders must verify and agree to the split"
+  ]
+}

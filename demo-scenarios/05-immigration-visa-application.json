@@ -1,0 +1,567 @@
+{
+  "id": "immigration-visa-h1b",
+  "version": "1.0.0",
+  "name": "H-1B Visa Petition Intake",
+  "description": "Immigration attorney AI pre-fills petition details from employer info and candidate resume. Applicant provides personal history, uploads documents, and signs declarations.",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "petitionInfo": {
+        "type": "object",
+        "title": "Petition Information",
+        "properties": {
+          "petitionType": {
+            "type": "string",
+            "title": "Petition Type",
+            "enum": ["initial", "amendment", "extension", "transfer"]
+          },
+          "processingType": {
+            "type": "string",
+            "title": "Processing Type",
+            "enum": ["regular", "premium-15-days"]
+          },
+          "requestedStartDate": { "type": "string", "format": "date" },
+          "requestedEndDate": { "type": "string", "format": "date" },
+          "capSubject": {
+            "type": "boolean",
+            "title": "Subject to H-1B Cap?"
+          },
+          "capExemptBasis": {
+            "type": "string",
+            "title": "Cap Exemption Basis (if applicable)",
+            "enum": ["higher-education", "nonprofit-research", "government-research", "prior-cap-counted", "not-applicable"]
+          }
+        },
+        "required": ["petitionType", "processingType", "requestedStartDate"]
+      },
+      "employer": {
+        "type": "object",
+        "title": "Petitioning Employer",
+        "properties": {
+          "companyName": { "type": "string", "title": "Legal Company Name" },
+          "dba": { "type": "string", "title": "DBA" },
+          "ein": { "type": "string", "title": "Federal EIN", "pattern": "^[0-9]{2}-[0-9]{7}$" },
+          "address": {
+            "type": "object",
+            "properties": {
+              "street": { "type": "string" },
+              "city": { "type": "string" },
+              "state": { "type": "string" },
+              "zipCode": { "type": "string" }
+            },
+            "required": ["street", "city", "state", "zipCode"]
+          },
+          "phone": { "type": "string" },
+          "website": { "type": "string", "format": "uri" },
+          "naicsCode": { "type": "string" },
+          "yearEstablished": { "type": "integer" },
+          "numberOfEmployees": { "type": "integer" },
+          "annualRevenue": { "type": "number" },
+          "signatoryName": { "type": "string", "title": "Authorized Signatory" },
+          "signatoryTitle": { "type": "string", "title": "Signatory Title" },
+          "signatoryPhone": { "type": "string" },
+          "signatoryEmail": { "type": "string", "format": "email" }
+        },
+        "required": ["companyName", "ein", "address", "numberOfEmployees", "signatoryName"]
+      },
+      "jobDetails": {
+        "type": "object",
+        "title": "Job / Position Details",
+        "properties": {
+          "jobTitle": { "type": "string", "title": "Job Title" },
+          "socCode": {
+            "type": "string",
+            "title": "SOC Code",
+            "pattern": "^[0-9]{2}-[0-9]{4}$"
+          },
+          "socTitle": { "type": "string", "title": "SOC Occupation Title" },
+          "wageLevel": {
+            "type": "string",
+            "title": "Wage Level",
+            "enum": ["Level I", "Level II", "Level III", "Level IV"]
+          },
+          "offeredWage": {
+            "type": "object",
+            "title": "Offered Wage",
+            "properties": {
+              "amount": { "type": "number", "minimum": 0 },
+              "period": { "type": "string", "enum": ["annual", "hourly"] },
+              "from": { "type": "number", "title": "Range From (if range)" },
+              "to": { "type": "number", "title": "Range To (if range)" }
+            },
+            "required": ["amount", "period"]
+          },
+          "prevailingWage": {
+            "type": "object",
+            "title": "Prevailing Wage",
+            "properties": {
+              "amount": { "type": "number" },
+              "source": { "type": "string", "enum": ["OFLC", "private-survey", "CBA", "SCA"] },
+              "determinationDate": { "type": "string", "format": "date" }
+            }
+          },
+          "worksite": {
+            "type": "object",
+            "title": "Primary Worksite",
+            "properties": {
+              "street": { "type": "string" },
+              "city": { "type": "string" },
+              "state": { "type": "string" },
+              "zipCode": { "type": "string" },
+              "county": { "type": "string" }
+            },
+            "required": ["street", "city", "state", "zipCode"]
+          },
+          "additionalWorksites": {
+            "type": "array",
+            "title": "Additional Work Locations",
+            "items": {
+              "type": "object",
+              "properties": {
+                "street": { "type": "string" },
+                "city": { "type": "string" },
+                "state": { "type": "string" },
+                "zipCode": { "type": "string" }
+              }
+            }
+          },
+          "fullTimePartTime": { "type": "string", "enum": ["full-time", "part-time"] },
+          "hoursPerWeek": { "type": "integer", "minimum": 1, "maximum": 60 },
+          "jobDuties": {
+            "type": "string",
+            "title": "Detailed Job Duties",
+            "minLength": 100,
+            "maxLength": 5000,
+            "description": "Detailed description of specialty occupation duties"
+          },
+          "minimumRequirements": {
+            "type": "object",
+            "title": "Minimum Education / Experience",
+            "properties": {
+              "degreeLevel": {
+                "type": "string",
+                "enum": ["bachelors", "masters", "doctorate", "professional"]
+              },
+              "fieldOfStudy": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 1
+              },
+              "yearsExperience": { "type": "integer", "minimum": 0 },
+              "specialSkills": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "licensesRequired": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            },
+            "required": ["degreeLevel", "fieldOfStudy"]
+          },
+          "specialtyOccupationBasis": {
+            "type": "array",
+            "title": "Specialty Occupation Criteria Met",
+            "items": {
+              "type": "string",
+              "enum": [
+                "degree-requirement-common-in-industry",
+                "degree-requirement-common-among-similar-employers",
+                "employer-normally-requires-degree",
+                "duties-so-specialized-degree-required"
+              ]
+            },
+            "minItems": 1
+          }
+        },
+        "required": ["jobTitle", "socCode", "offeredWage", "worksite", "jobDuties", "minimumRequirements", "specialtyOccupationBasis"]
+      },
+      "beneficiary": {
+        "type": "object",
+        "title": "Beneficiary (Applicant) Information",
+        "properties": {
+          "fullName": {
+            "type": "object",
+            "properties": {
+              "familyName": { "type": "string" },
+              "givenName": { "type": "string" },
+              "middleName": { "type": "string" }
+            },
+            "required": ["familyName", "givenName"]
+          },
+          "otherNames": {
+            "type": "array",
+            "title": "Other Names Used",
+            "items": {
+              "type": "object",
+              "properties": {
+                "familyName": { "type": "string" },
+                "givenName": { "type": "string" },
+                "middleName": { "type": "string" }
+              }
+            }
+          },
+          "dateOfBirth": { "type": "string", "format": "date" },
+          "countryOfBirth": { "type": "string" },
+          "cityOfBirth": { "type": "string" },
+          "citizenship": { "type": "string" },
+          "gender": { "type": "string", "enum": ["male", "female"] },
+          "passportNumber": { "type": "string" },
+          "passportCountry": { "type": "string" },
+          "passportExpiration": { "type": "string", "format": "date" },
+          "currentNonimmigrantStatus": {
+            "type": "string",
+            "title": "Current Immigration Status",
+            "enum": ["F-1", "F-1-OPT", "F-1-STEM-OPT", "H-1B", "H-4", "L-1", "O-1", "J-1", "B-1/B-2", "TN", "E-2", "outside-US", "other"]
+          },
+          "currentStatusExpiration": { "type": "string", "format": "date" },
+          "i94Number": { "type": "string", "title": "I-94 Arrival/Departure Number" },
+          "uscisAccountNumber": { "type": "string", "title": "USCIS Online Account Number" },
+          "socialSecurityNumber": {
+            "type": "string",
+            "title": "SSN (if issued)",
+            "description": "Human-only — sensitive"
+          },
+          "usAddress": {
+            "type": "object",
+            "title": "Current U.S. Address",
+            "properties": {
+              "street": { "type": "string" },
+              "apt": { "type": "string" },
+              "city": { "type": "string" },
+              "state": { "type": "string" },
+              "zipCode": { "type": "string" }
+            },
+            "required": ["street", "city", "state", "zipCode"]
+          },
+          "foreignAddress": {
+            "type": "object",
+            "title": "Foreign Address",
+            "properties": {
+              "street": { "type": "string" },
+              "city": { "type": "string" },
+              "province": { "type": "string" },
+              "postalCode": { "type": "string" },
+              "country": { "type": "string" }
+            },
+            "required": ["street", "city", "country"]
+          }
+        },
+        "required": ["fullName", "dateOfBirth", "countryOfBirth", "citizenship", "passportNumber"]
+      },
+      "education": {
+        "type": "array",
+        "title": "Education History",
+        "items": {
+          "type": "object",
+          "properties": {
+            "institution": { "type": "string", "title": "Institution Name" },
+            "country": { "type": "string" },
+            "degreeLevel": {
+              "type": "string",
+              "enum": ["bachelors", "masters", "doctorate", "professional", "associate", "diploma"]
+            },
+            "fieldOfStudy": { "type": "string" },
+            "dateAttendedFrom": { "type": "string", "format": "date" },
+            "dateAttendedTo": { "type": "string", "format": "date" },
+            "dateConferred": { "type": "string", "format": "date" },
+            "credentialEvaluation": {
+              "type": "object",
+              "title": "Credential Evaluation (for foreign degrees)",
+              "properties": {
+                "evaluator": { "type": "string" },
+                "usEquivalent": { "type": "string" },
+                "evaluationDate": { "type": "string", "format": "date" },
+                "evaluationDocument": { "type": "string", "format": "uri" }
+              }
+            }
+          },
+          "required": ["institution", "country", "degreeLevel", "fieldOfStudy"]
+        },
+        "minItems": 1
+      },
+      "employmentHistory": {
+        "type": "array",
+        "title": "Employment History (last 10 years)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "employer": { "type": "string" },
+            "jobTitle": { "type": "string" },
+            "startDate": { "type": "string", "format": "date" },
+            "endDate": { "type": "string", "format": "date" },
+            "isCurrent": { "type": "boolean" },
+            "city": { "type": "string" },
+            "country": { "type": "string" },
+            "duties": { "type": "string" },
+            "supervisorName": { "type": "string" },
+            "supervisorPhone": { "type": "string" }
+          },
+          "required": ["employer", "jobTitle", "startDate"]
+        }
+      },
+      "travelHistory": {
+        "type": "object",
+        "title": "Travel & Immigration History",
+        "description": "Must be completed by applicant — human-only",
+        "properties": {
+          "lastFiveUSEntries": {
+            "type": "array",
+            "title": "Last 5 U.S. Entries",
+            "items": {
+              "type": "object",
+              "properties": {
+                "arrivalDate": { "type": "string", "format": "date" },
+                "departureDate": { "type": "string", "format": "date" },
+                "portOfEntry": { "type": "string" },
+                "statusAdmitted": { "type": "string" }
+              },
+              "required": ["arrivalDate", "portOfEntry", "statusAdmitted"]
+            },
+            "maxItems": 5
+          },
+          "previousVisaDenials": {
+            "type": "boolean",
+            "title": "Have you ever been denied a U.S. visa?"
+          },
+          "previousVisaDenialDetails": { "type": "string" },
+          "previousDeportation": {
+            "type": "boolean",
+            "title": "Have you ever been deported or removed from the U.S.?"
+          },
+          "previousOverstay": {
+            "type": "boolean",
+            "title": "Have you ever overstayed a U.S. visa?"
+          },
+          "criminalHistory": {
+            "type": "boolean",
+            "title": "Have you ever been arrested or convicted of a crime?"
+          },
+          "criminalDetails": { "type": "string" }
+        },
+        "required": ["previousVisaDenials", "previousDeportation", "previousOverstay", "criminalHistory"]
+      },
+      "dependents": {
+        "type": "array",
+        "title": "Dependents (H-4 Applications)",
+        "items": {
+          "type": "object",
+          "properties": {
+            "fullName": { "type": "string" },
+            "relationship": { "type": "string", "enum": ["spouse", "child"] },
+            "dateOfBirth": { "type": "string", "format": "date" },
+            "countryOfBirth": { "type": "string" },
+            "citizenship": { "type": "string" },
+            "passportNumber": { "type": "string" },
+            "passportExpiration": { "type": "string", "format": "date" },
+            "currentStatus": { "type": "string" },
+            "filingH4": { "type": "boolean", "title": "Filing H-4 concurrently?" }
+          },
+          "required": ["fullName", "relationship", "dateOfBirth"]
+        }
+      },
+      "documents": {
+        "type": "object",
+        "title": "Required Documents",
+        "properties": {
+          "passport": { "type": "string", "title": "Passport (bio page scan)", "format": "uri" },
+          "currentVisaStamp": { "type": "string", "title": "Current Visa Stamp", "format": "uri" },
+          "i94": { "type": "string", "title": "Most Recent I-94", "format": "uri" },
+          "previousApprovals": {
+            "type": "array",
+            "title": "Previous H-1B/Immigration Approval Notices",
+            "items": { "type": "string", "format": "uri" }
+          },
+          "degreeTranscripts": {
+            "type": "array",
+            "title": "Degree Certificates & Transcripts",
+            "items": { "type": "string", "format": "uri" },
+            "minItems": 1
+          },
+          "credentialEvaluation": {
+            "type": "string",
+            "title": "Foreign Credential Evaluation (if applicable)",
+            "format": "uri"
+          },
+          "resume": { "type": "string", "title": "Current Resume/CV", "format": "uri" },
+          "offerLetter": { "type": "string", "title": "Employer Offer Letter", "format": "uri" },
+          "supportLetter": { "type": "string", "title": "Employer Support Letter", "format": "uri" },
+          "lcaCertification": { "type": "string", "title": "Certified LCA (ETA Form 9035)", "format": "uri" },
+          "specialtyEvidence": {
+            "type": "array",
+            "title": "Evidence of Specialty Occupation",
+            "description": "Job postings, expert letters, industry publications",
+            "items": { "type": "string", "format": "uri" }
+          },
+          "dependentDocuments": {
+            "type": "array",
+            "title": "Dependent Passports & Marriage/Birth Certificates",
+            "items": { "type": "string", "format": "uri" }
+          }
+        },
+        "required": ["passport", "degreeTranscripts", "resume", "offerLetter"]
+      },
+      "declarations": {
+        "type": "object",
+        "title": "Declarations & Signatures",
+        "properties": {
+          "beneficiarySignature": { "type": "string", "title": "Beneficiary Signature (type full legal name)" },
+          "beneficiarySignatureDate": { "type": "string", "format": "date" },
+          "employerSignature": { "type": "string", "title": "Employer Authorized Signatory" },
+          "employerSignatureDate": { "type": "string", "format": "date" },
+          "attestTruthfulness": {
+            "type": "boolean",
+            "title": "I certify all information is true and correct",
+            "const": true
+          },
+          "attestNoMisrepresentation": {
+            "type": "boolean",
+            "title": "I have not withheld any material information",
+            "const": true
+          },
+          "attorneyName": { "type": "string" },
+          "attorneyBarNumber": { "type": "string" },
+          "attorneySignature": { "type": "string" },
+          "attorneySignatureDate": { "type": "string", "format": "date" }
+        },
+        "required": ["beneficiarySignature", "beneficiarySignatureDate", "employerSignature", "attestTruthfulness"]
+      }
+    },
+    "required": ["petitionInfo", "employer", "jobDetails", "beneficiary", "education", "travelHistory", "documents", "declarations"]
+  },
+  "agentPreFill": {
+    "_description": "Immigration attorney AI pre-fills from employer records, candidate resume, and initial consultation",
+    "petitionInfo": {
+      "petitionType": "initial",
+      "processingType": "premium-15-days",
+      "requestedStartDate": "2026-10-01",
+      "requestedEndDate": "2029-09-30",
+      "capSubject": true,
+      "capExemptBasis": "not-applicable"
+    },
+    "employer": {
+      "companyName": "Cascade Analytics, Inc.",
+      "ein": "84-3291047",
+      "address": {
+        "street": "1200 Fifth Avenue",
+        "city": "Seattle",
+        "state": "WA",
+        "zipCode": "98101"
+      },
+      "phone": "+1-206-555-0800",
+      "website": "https://cascadeanalytics.com",
+      "naicsCode": "541511",
+      "yearEstablished": 2019,
+      "numberOfEmployees": 145,
+      "annualRevenue": 28000000,
+      "signatoryName": "Jennifer Park",
+      "signatoryTitle": "VP of People Operations",
+      "signatoryEmail": "jpark@cascadeanalytics.com"
+    },
+    "jobDetails": {
+      "jobTitle": "Senior Machine Learning Engineer",
+      "socCode": "15-2051",
+      "socTitle": "Data Scientists",
+      "wageLevel": "Level III",
+      "offeredWage": {
+        "amount": 185000,
+        "period": "annual"
+      },
+      "prevailingWage": {
+        "amount": 156000,
+        "source": "OFLC",
+        "determinationDate": "2026-01-10"
+      },
+      "worksite": {
+        "street": "1200 Fifth Avenue",
+        "city": "Seattle",
+        "state": "WA",
+        "zipCode": "98101",
+        "county": "King"
+      },
+      "fullTimePartTime": "full-time",
+      "hoursPerWeek": 40,
+      "jobDuties": "Design, develop, and deploy production machine learning systems for real-time analytics platform. Architect neural network models for time-series forecasting and anomaly detection in IoT sensor data. Lead a team of 3 ML engineers in implementing MLOps pipelines using Kubernetes, Kubeflow, and custom CI/CD infrastructure. Collaborate with product and data engineering teams to define ML system requirements and translate business problems into technical solutions. Conduct research on state-of-the-art techniques in transformer architectures and apply findings to improve model performance. Mentor junior engineers and contribute to engineering culture through tech talks and internal publications.",
+      "minimumRequirements": {
+        "degreeLevel": "masters",
+        "fieldOfStudy": ["Computer Science", "Machine Learning", "Artificial Intelligence", "Data Science", "Statistics"],
+        "yearsExperience": 3,
+        "specialSkills": ["PyTorch", "TensorFlow", "Kubernetes", "distributed systems", "MLOps"]
+      },
+      "specialtyOccupationBasis": [
+        "degree-requirement-common-in-industry",
+        "duties-so-specialized-degree-required"
+      ]
+    },
+    "beneficiary": {
+      "fullName": {
+        "familyName": "Krishnamurthy",
+        "givenName": "Aravind",
+        "middleName": "Sai"
+      },
+      "countryOfBirth": "India",
+      "cityOfBirth": "Hyderabad",
+      "citizenship": "India",
+      "gender": "male",
+      "currentNonimmigrantStatus": "F-1-STEM-OPT"
+    },
+    "education": [
+      {
+        "institution": "University of Washington",
+        "country": "US",
+        "degreeLevel": "masters",
+        "fieldOfStudy": "Computer Science (Machine Learning specialization)",
+        "dateAttendedFrom": "2022-09-01",
+        "dateAttendedTo": "2024-06-15",
+        "dateConferred": "2024-06-15"
+      },
+      {
+        "institution": "Indian Institute of Technology Hyderabad",
+        "country": "India",
+        "degreeLevel": "bachelors",
+        "fieldOfStudy": "Computer Science and Engineering",
+        "dateAttendedFrom": "2018-07-01",
+        "dateAttendedTo": "2022-05-30",
+        "dateConferred": "2022-05-30",
+        "credentialEvaluation": {
+          "evaluator": "World Education Services (WES)",
+          "usEquivalent": "Bachelor of Science in Computer Science"
+        }
+      }
+    ],
+    "employmentHistory": [
+      {
+        "employer": "Cascade Analytics, Inc.",
+        "jobTitle": "Machine Learning Engineer (OPT)",
+        "startDate": "2024-08-15",
+        "isCurrent": true,
+        "city": "Seattle",
+        "country": "US",
+        "duties": "Developing ML models for time-series analytics platform"
+      },
+      {
+        "employer": "Amazon Web Services",
+        "jobTitle": "Applied Scientist Intern",
+        "startDate": "2023-06-01",
+        "endDate": "2023-09-01",
+        "city": "Seattle",
+        "country": "US",
+        "duties": "Research on efficient transformer architectures for edge deployment"
+      }
+    ]
+  },
+  "humanRequired": [
+    "beneficiary.dateOfBirth — Personal info, applicant enters directly",
+    "beneficiary.passportNumber/Country/Expiration — From physical document",
+    "beneficiary.socialSecurityNumber — Sensitive PII",
+    "beneficiary.i94Number — From I-94 record",
+    "beneficiary.usAddress — Current address",
+    "beneficiary.foreignAddress — Home country address",
+    "travelHistory (entire section) — Immigration history questions, applicant must answer truthfully",
+    "dependents — Applicant provides family details",
+    "documents (all uploads) — Physical documents: passport scan, transcripts, I-94, etc.",
+    "declarations.beneficiarySignature — Must sign personally",
+    "declarations.employerSignature — Employer signatory signs separately",
+    "education[*].credentialEvaluation.evaluationDocument — Upload actual evaluation letter"
+  ]
+}
