@@ -139,6 +139,11 @@ export interface Submission {
    * Completed wizard step IDs
    */
   completedSteps?: string[];
+
+  /**
+   * Review decisions made by approval reviewers
+   */
+  reviewDecisions?: import("./core/approval-manager").ReviewDecision[];
 }
 
 /**

@@ -140,6 +140,73 @@ class InMemorySubmissionStore {
   getPendingApprovalCount(): number {
     return this.stateCountMap.get('needs_review') ?? 0;
   }
+
+  /**
+   * Evict terminal-state submissions beyond the configured max.
+   * Removes oldest terminal submissions first (by updatedAt).
+   * @returns Number of evicted submissions
+   */
+  evictTerminal(maxEntries: number): number {
+    if (this.submissions.size <= maxEntries) return 0;
+
+    const terminal = new Set(['rejected', 'finalized', 'cancelled', 'expired']);
+    const candidates: Submission[] = [];
+    for (const sub of this.submissions.values()) {
+      if (terminal.has(sub.state)) {
+        candidates.push(sub);
+      }
+    }
+
+    // Sort oldest first
+    candidates.sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+
+    const toEvict = Math.min(candidates.length, this.submissions.size - maxEntries);
+    let evicted = 0;
+    for (let i = 0; i < toEvict; i++) {
+      const sub = candidates[i]!;
+      this.submissions.delete(sub.id);
+      this.resumeTokenIndex.delete(sub.resumeToken);
+      this.lastKnownToken.delete(sub.id);
+      if (sub.idempotencyKey) this.idempotencyIndex.delete(sub.idempotencyKey);
+      const st = this.lastKnownState.get(sub.id);
+      if (st) {
+        this.stateCountMap.set(st, (this.stateCountMap.get(st) ?? 1) - 1);
+        this.lastKnownState.delete(sub.id);
+      }
+      evicted++;
+    }
+    return evicted;
+  }
+
+  /**
+   * Remove submissions that have expired (expiresAt in the past + terminal state).
+   * @returns Number of cleaned-up submissions
+   */
+  cleanupExpired(): number {
+    const now = new Date().toISOString();
+    const terminal = new Set(['rejected', 'finalized', 'cancelled', 'expired']);
+    let removed = 0;
+    for (const [id, sub] of this.submissions) {
+      if (sub.expiresAt && sub.expiresAt < now && terminal.has(sub.state)) {
+        this.submissions.delete(id);
+        this.resumeTokenIndex.delete(sub.resumeToken);
+        this.lastKnownToken.delete(id);
+        if (sub.idempotencyKey) this.idempotencyIndex.delete(sub.idempotencyKey);
+        const st = this.lastKnownState.get(id);
+        if (st) {
+          this.stateCountMap.set(st, (this.stateCountMap.get(st) ?? 1) - 1);
+          this.lastKnownState.delete(id);
+        }
+        removed++;
+      }
+    }
+    return removed;
+  }
+
+  /** Current number of stored submissions */
+  get size(): number {
+    return this.submissions.size;
+  }
 }
 
 /**

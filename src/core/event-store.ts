@@ -221,12 +221,22 @@ export class InMemoryEventStore implements EventStore {
     event.version = nextVersion;
     this.versionCounters.set(event.submissionId, nextVersion);
 
-    // Append event (events are already ordered by timestamp in practice)
-    events.push(event);
+    // Append event — insert in order if out-of-sequence, otherwise just push (O(1) typical)
     this.eventIds.add(event.eventId);
-
-    // Sort to maintain chronological order (defensive - handles out-of-order appends)
-    events.sort((a, b) => a.ts.localeCompare(b.ts));
+    const lastEvent = events[events.length - 1];
+    if (!lastEvent || event.ts >= lastEvent.ts) {
+      events.push(event);
+    } else {
+      // Out-of-order: binary search for insertion point
+      let lo = 0;
+      let hi = events.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >>> 1;
+        if (events[mid]!.ts <= event.ts) lo = mid + 1;
+        else hi = mid;
+      }
+      events.splice(lo, 0, event);
+    }
 
     // Maintain bounded recent events list (newest first)
     this.recentEvents.unshift(event);

@@ -172,11 +172,11 @@ export class ApprovalManager {
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
 
-    // Store review decision in submission metadata
-    if (!(submission as any).reviewDecisions) {
-      (submission as any).reviewDecisions = [];
+    // Store review decision
+    if (!submission.reviewDecisions) {
+      submission.reviewDecisions = [];
     }
-    (submission as any).reviewDecisions.push(reviewDecision);
+    submission.reviewDecisions.push(reviewDecision);
 
     // Emit review.approved event
     const event: IntakeEvent = {
@@ -254,11 +254,11 @@ export class ApprovalManager {
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
 
-    // Store review decision in submission metadata
-    if (!(submission as any).reviewDecisions) {
-      (submission as any).reviewDecisions = [];
+    // Store review decision
+    if (!submission.reviewDecisions) {
+      submission.reviewDecisions = [];
     }
-    (submission as any).reviewDecisions.push(reviewDecision);
+    submission.reviewDecisions.push(reviewDecision);
 
     // Emit review.rejected event
     const event: IntakeEvent = {
@@ -337,11 +337,11 @@ export class ApprovalManager {
     submission.updatedAt = now;
     submission.updatedBy = request.actor;
 
-    // Store review decision in submission metadata
-    if (!(submission as any).reviewDecisions) {
-      (submission as any).reviewDecisions = [];
+    // Store review decision
+    if (!submission.reviewDecisions) {
+      submission.reviewDecisions = [];
     }
-    (submission as any).reviewDecisions.push(reviewDecision);
+    submission.reviewDecisions.push(reviewDecision);
 
     // Emit field.updated event (custom event type for changes requested)
     const event: IntakeEvent = {

@@ -455,7 +455,7 @@ export class Validator {
     received?: unknown;
   } {
     const keyword = error.keyword;
-    const params = error.params as any;
+    const params = error.params as Record<string, unknown>;
     const message = error.message ?? 'Validation failed';
 
     switch (keyword) {
@@ -496,7 +496,7 @@ export class Validator {
           code: 'too_short',
           message: `Value is too short (minimum length: ${params.limit})`,
           expected: `at least ${params.limit} characters`,
-          received: `${(error.data as any)?.length ?? 0} characters`,
+          received: `${typeof error.data === 'string' ? error.data.length : 0} characters`,
         };
 
       case 'maxLength':
@@ -504,7 +504,7 @@ export class Validator {
           code: 'too_long',
           message: `Value is too long (maximum length: ${params.limit})`,
           expected: `at most ${params.limit} characters`,
-          received: `${(error.data as any)?.length ?? 0} characters`,
+          received: `${typeof error.data === 'string' ? error.data.length : 0} characters`,
         };
 
       case 'minimum':
@@ -528,7 +528,7 @@ export class Validator {
       case 'enum':
         return {
           code: 'invalid_value',
-          message: `Value must be one of: ${params.allowedValues.join(', ')}`,
+          message: `Value must be one of: ${(params.allowedValues as unknown[]).join(', ')}`,
           expected: params.allowedValues,
           received: error.data,
         };
@@ -536,7 +536,7 @@ export class Validator {
       case 'const':
         return {
           code: 'invalid_value',
-          message: `Value must be exactly: ${params.allowedValue}`,
+          message: `Value must be exactly: ${params.allowedValue as string}`,
           expected: params.allowedValue,
           received: error.data,
         };
@@ -556,8 +556,8 @@ export class Validator {
    */
   private extractFieldFromError(error: ErrorObject): string {
     if (error.keyword === 'required' && error.params) {
-      const params = error.params as any;
-      return params.missingProperty || '';
+      const params = error.params as Record<string, unknown>;
+      return (params.missingProperty as string) || '';
     }
     return '';
   }

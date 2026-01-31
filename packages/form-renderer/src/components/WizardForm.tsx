@@ -83,6 +83,11 @@ export function WizardForm({
       steps: state.visibleSteps,
       currentStepId: state.currentStep?.id,
       completedSteps: state.completedSteps,
+      onGoToStep: (stepId: string) => {
+        setErrors([]);
+        actions.goToStep(stepId);
+        onStepChange?.(stepId);
+      },
     }),
     React.createElement(
       "div",
