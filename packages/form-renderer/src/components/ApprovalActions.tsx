@@ -3,7 +3,7 @@
  * Provides approve, reject, and request changes actions for approval workflows
  */
 
-import React from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { Actor } from '../types';
 
 /**
@@ -94,46 +94,89 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
   layout = 'horizontal',
   size = 'medium',
 }) => {
-  // Handle approve action
-  const handleApprove = async () => {
+  // Dialog state
+  const [dialog, setDialog] = useState<'approve' | 'reject' | 'request-changes' | null>(null);
+  const [dialogText, setDialogText] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Focus textarea when dialog opens
+  useEffect(() => {
+    if (dialog && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [dialog]);
+
+  // Close dialog on Escape
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setDialog(null);
+      setDialogText('');
+    }
+  }, []);
+
+  // Handle approve action — shows confirmation dialog
+  const handleApprove = () => {
+    setDialog('approve');
+    setDialogText('');
+  };
+
+  const confirmApprove = async () => {
+    setDialog(null);
     if (onApprove) {
       await onApprove({
         submissionId,
         resumeToken,
         actor: reviewer,
+        comment: dialogText || undefined,
       });
     }
+    setDialogText('');
   };
 
-  // Handle reject action
-  const handleReject = async () => {
-    // In a real implementation, this would show a dialog to collect the reason
-    // For now, we'll use a simple prompt (can be customized by parent component)
-    const reason = prompt('Please provide a reason for rejection:');
-    if (reason && onReject) {
+  // Handle reject action — shows dialog with reason textarea
+  const handleReject = () => {
+    setDialog('reject');
+    setDialogText('');
+  };
+
+  const confirmReject = async () => {
+    if (!dialogText.trim()) return;
+    setDialog(null);
+    if (onReject) {
       await onReject({
         submissionId,
         resumeToken,
         actor: reviewer,
-        reason,
+        reason: dialogText.trim(),
       });
     }
+    setDialogText('');
   };
 
-  // Handle request changes action
-  const handleRequestChanges = async () => {
-    // In a real implementation, this would show a dialog to collect field comments
-    // For now, we'll use a simple prompt (can be customized by parent component)
-    const comment = prompt('Please provide feedback for the changes needed:');
-    if (comment && onRequestChanges) {
+  // Handle request changes action — shows dialog with feedback textarea
+  const handleRequestChanges = () => {
+    setDialog('request-changes');
+    setDialogText('');
+  };
+
+  const confirmRequestChanges = async () => {
+    if (!dialogText.trim()) return;
+    setDialog(null);
+    if (onRequestChanges) {
       await onRequestChanges({
         submissionId,
         resumeToken,
         actor: reviewer,
         fieldComments: [],
-        comment,
+        comment: dialogText.trim(),
       });
     }
+    setDialogText('');
+  };
+
+  const closeDialog = () => {
+    setDialog(null);
+    setDialogText('');
   };
 
   // Build CSS class list
@@ -192,6 +235,92 @@ export const ApprovalActions: React.FC<ApprovalActionsProps> = ({
       >
         {loading ? 'Processing...' : 'Request Changes'}
       </button>
+
+      {/* Confirmation/Input Dialog */}
+      {dialog && (
+        <div
+          className="formbridge-dialog-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) closeDialog(); }}
+          onKeyDown={handleKeyDown}
+          role="presentation"
+        >
+          <div
+            className="formbridge-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={
+              dialog === 'approve' ? 'Confirm approval' :
+              dialog === 'reject' ? 'Provide rejection reason' :
+              'Provide feedback for changes'
+            }
+          >
+            <h3 className="formbridge-dialog__title">
+              {dialog === 'approve' && 'Confirm Approval'}
+              {dialog === 'reject' && 'Reject Submission'}
+              {dialog === 'request-changes' && 'Request Changes'}
+            </h3>
+
+            {dialog === 'approve' && (
+              <p className="formbridge-dialog__text">
+                Are you sure you want to approve this submission?
+              </p>
+            )}
+
+            {(dialog === 'reject' || dialog === 'request-changes') && (
+              <textarea
+                ref={textareaRef}
+                className="formbridge-dialog__textarea"
+                value={dialogText}
+                onChange={(e) => setDialogText(e.target.value)}
+                placeholder={
+                  dialog === 'reject'
+                    ? 'Please provide a reason for rejection (required)...'
+                    : 'Please provide feedback for the changes needed (required)...'
+                }
+                rows={4}
+                aria-label={dialog === 'reject' ? 'Rejection reason' : 'Change feedback'}
+                required
+              />
+            )}
+
+            {dialog === 'approve' && (
+              <textarea
+                ref={textareaRef}
+                className="formbridge-dialog__textarea"
+                value={dialogText}
+                onChange={(e) => setDialogText(e.target.value)}
+                placeholder="Optional comment..."
+                rows={2}
+                aria-label="Approval comment"
+              />
+            )}
+
+            <div className="formbridge-dialog__actions">
+              <button
+                type="button"
+                className="formbridge-dialog__btn formbridge-dialog__btn--cancel"
+                onClick={closeDialog}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`formbridge-dialog__btn formbridge-dialog__btn--confirm formbridge-dialog__btn--${dialog}`}
+                onClick={
+                  dialog === 'approve' ? confirmApprove :
+                  dialog === 'reject' ? confirmReject :
+                  confirmRequestChanges
+                }
+                disabled={
+                  (dialog === 'reject' || dialog === 'request-changes') && !dialogText.trim()
+                }
+              >
+                {dialog === 'approve' ? 'Approve' : dialog === 'reject' ? 'Reject' : 'Submit Feedback'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

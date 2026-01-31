@@ -58,7 +58,7 @@ export interface FieldWrapperProps {
  * </FieldWrapper>
  * ```
  */
-export const FieldWrapper: React.FC<FieldWrapperProps> = ({
+export const FieldWrapper: React.FC<FieldWrapperProps> = React.memo(({
   path,
   label,
   description,
@@ -219,6 +219,6 @@ export const FieldWrapper: React.FC<FieldWrapperProps> = ({
       )}
     </div>
   );
-};
+});
 
 FieldWrapper.displayName = 'FieldWrapper';

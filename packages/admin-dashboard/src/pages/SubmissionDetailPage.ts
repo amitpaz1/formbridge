@@ -2,7 +2,7 @@
  * SubmissionDetailPage — Detailed view of a single submission.
  */
 
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import type { SubmissionDetail } from "../api/client.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { EventTimeline } from "../components/EventTimeline.js";
@@ -11,8 +11,8 @@ export interface SubmissionDetailPageProps {
   submission: SubmissionDetail | null;
   loading: boolean;
   error?: string;
-  onApprove?: () => void;
-  onReject?: () => void;
+  onApprove?: (comment?: string) => void;
+  onReject?: (reason: string) => void;
   onBack: () => void;
 }
 
@@ -24,6 +24,9 @@ export function SubmissionDetailPage({
   onReject,
   onBack,
 }: SubmissionDetailPageProps) {
+  const [dialog, setDialog] = useState<'approve' | 'reject' | null>(null);
+  const [dialogText, setDialogText] = useState('');
+
   if (loading) {
     return createElement("div", { className: "fb-page fb-page--loading" }, "Loading submission...");
   }
@@ -35,6 +38,8 @@ export function SubmissionDetailPage({
   if (!submission) {
     return createElement("div", { className: "fb-page" }, "Submission not found.");
   }
+
+  const closeDialog = () => { setDialog(null); setDialogText(''); };
 
   return createElement(
     "div",
@@ -80,15 +85,63 @@ export function SubmissionDetailPage({
         onApprove &&
           createElement(
             "button",
-            { onClick: onApprove, className: "fb-btn fb-btn--approve" },
+            { onClick: () => setDialog('approve'), className: "fb-btn fb-btn--approve" },
             "Approve"
           ),
         onReject &&
           createElement(
             "button",
-            { onClick: onReject, className: "fb-btn fb-btn--reject" },
+            { onClick: () => setDialog('reject'), className: "fb-btn fb-btn--reject" },
             "Reject"
           )
+      ),
+    // Confirmation dialog
+    dialog &&
+      createElement(
+        "div",
+        {
+          className: "fb-dialog-overlay",
+          onClick: (e: { target: unknown; currentTarget: unknown }) => { if (e.target === e.currentTarget) closeDialog(); },
+        },
+        createElement(
+          "div",
+          { className: "fb-dialog", role: "dialog", "aria-modal": "true" },
+          createElement("h3", { className: "fb-dialog__title" },
+            dialog === 'approve' ? 'Confirm Approval' : 'Reject Submission'
+          ),
+          dialog === 'approve' &&
+            createElement("p", null, "Are you sure you want to approve this submission?"),
+          createElement("textarea", {
+            className: "fb-dialog__textarea",
+            value: dialogText,
+            onChange: (e: { target: { value: string } }) => setDialogText(e.target.value),
+            placeholder: dialog === 'reject'
+              ? 'Please provide a reason for rejection (required)...'
+              : 'Optional comment...',
+            rows: dialog === 'reject' ? 4 : 2,
+            "aria-label": dialog === 'reject' ? 'Rejection reason' : 'Approval comment',
+          }),
+          createElement(
+            "div",
+            { className: "fb-dialog__actions" },
+            createElement("button", {
+              onClick: closeDialog,
+              className: "fb-btn fb-btn--cancel",
+            }, "Cancel"),
+            createElement("button", {
+              onClick: () => {
+                if (dialog === 'approve') {
+                  onApprove?.(dialogText || undefined);
+                } else if (dialogText.trim()) {
+                  onReject?.(dialogText.trim());
+                }
+                closeDialog();
+              },
+              className: `fb-btn fb-btn--${dialog}`,
+              disabled: dialog === 'reject' && !dialogText.trim(),
+            }, dialog === 'approve' ? 'Approve' : 'Reject')
+          )
+        )
       ),
     // Event timeline
     createElement(

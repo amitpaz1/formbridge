@@ -89,6 +89,15 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
 
   const [submitState, setSubmitState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const formContainerRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  // Focus the form container once the submission data has loaded
+  useEffect(() => {
+    if (submission && !loading && submitState === 'idle' && formContainerRef.current) {
+      formContainerRef.current.focus();
+    }
+  }, [submission, loading, submitState]);
 
   const handleSubmit = useCallback(async (fields: Record<string, unknown>) => {
     if (!submission) return;
@@ -149,12 +158,19 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
     }
   }, [submission, endpoint, resolvedToken]);
 
+  // Focus result container after submit outcome
+  useEffect(() => {
+    if ((submitState === 'success' || submitState === 'error') && resultRef.current) {
+      resultRef.current.focus();
+    }
+  }, [submitState]);
+
   // Success state
   if (submitState === 'success') {
     return (
       <div className={`formbridge-resume-page ${className}`.trim()}>
-        <div className="formbridge-resume-page__container">
-          <h2 className="formbridge-resume-page__title">✅ Submitted Successfully</h2>
+        <div ref={resultRef} tabIndex={-1} className="formbridge-resume-page__container">
+          <h2 className="formbridge-resume-page__title">Submitted Successfully</h2>
           <p>Your form has been submitted. Thank you!</p>
         </div>
       </div>
@@ -198,10 +214,10 @@ export const ResumeFormPage: React.FC<ResumeFormPageProps> = ({
   // Success state - render form with submission data
   return (
     <div className={`formbridge-resume-page ${className}`.trim()}>
-      <div className="formbridge-resume-page__container">
+      <div ref={formContainerRef} tabIndex={-1} className="formbridge-resume-page__container">
         <h2 className="formbridge-resume-page__title">Resume Form</h2>
         {submitState === 'error' && submitError && (
-          <div className="formbridge-resume-page__error" role="alert">
+          <div ref={resultRef} tabIndex={-1} className="formbridge-resume-page__error" role="alert">
             <p className="formbridge-resume-page__error-message">{submitError}</p>
           </div>
         )}

@@ -25,6 +25,8 @@ export interface DataTableProps<T> {
   onPageChange?: (page: number) => void;
   className?: string;
   emptyMessage?: string;
+  /** Function to generate aria-label for each row (for accessibility) */
+  rowLabel?: (row: T) => string;
 }
 
 interface SortState {
@@ -43,6 +45,7 @@ export function DataTable<T>({
   onPageChange,
   className,
   emptyMessage = "No data found.",
+  rowLabel,
 }: DataTableProps<T>) {
   const [sort, setSort] = useState<SortState | null>(null);
 
@@ -139,6 +142,15 @@ export function DataTable<T>({
                   key: keyAccessor(row),
                   className: `fb-table__row ${onRowClick ? "fb-table__row--clickable" : ""}`,
                   onClick: onRowClick ? () => onRowClick(row) : undefined,
+                  onKeyDown: onRowClick ? (e: { key: string; preventDefault: () => void }) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onRowClick(row);
+                    }
+                  } : undefined,
+                  tabIndex: onRowClick ? 0 : undefined,
+                  role: onRowClick ? "button" : undefined,
+                  "aria-label": onRowClick && rowLabel ? rowLabel(row) : undefined,
                   style: onRowClick ? { cursor: "pointer" } : undefined,
                 },
                 columns.map((col) => {

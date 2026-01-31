@@ -33,8 +33,11 @@ export function Layout({ currentPath, children, onNavigate }: LayoutProps) {
       createElement(
         "ul",
         { className: "fb-layout__nav" },
-        NAV_ITEMS.map((item) =>
-          createElement(
+        NAV_ITEMS.map((item) => {
+          const isActive = item.path === '/'
+            ? currentPath === '/'
+            : currentPath === item.path || currentPath.startsWith(item.path + '/');
+          return createElement(
             "li",
             { key: item.id },
             createElement(
@@ -42,10 +45,10 @@ export function Layout({ currentPath, children, onNavigate }: LayoutProps) {
               {
                 href: item.path,
                 className: `fb-layout__link ${
-                  currentPath === item.path ? "fb-layout__link--active" : ""
+                  isActive ? "fb-layout__link--active" : ""
                 }`,
                 "aria-current":
-                  currentPath === item.path ? "page" : undefined,
+                  isActive ? "page" : undefined,
                 onClick: (e: Event) => {
                   e.preventDefault();
                   onNavigate(item.path);
@@ -53,8 +56,8 @@ export function Layout({ currentPath, children, onNavigate }: LayoutProps) {
               },
               item.label
             )
-          )
-        )
+          );
+        })
       )
     ),
     // Main content

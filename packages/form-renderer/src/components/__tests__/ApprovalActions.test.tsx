@@ -21,11 +21,6 @@ describe('ApprovalActions', () => {
     reviewer,
   };
 
-  // Mock window.prompt
-  beforeEach(() => {
-    vi.spyOn(window, 'prompt').mockReturnValue(null);
-  });
-
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -57,13 +52,18 @@ describe('ApprovalActions', () => {
   });
 
   describe('approve action', () => {
-    it('should call onApprove when approve button is clicked', async () => {
+    it('should call onApprove when approve button is clicked and confirmed', async () => {
       const onApprove = vi.fn();
 
       render(<ApprovalActions {...defaultProps} onApprove={onApprove} />);
 
+      // Click approve to open dialog
       const approveButton = screen.getByRole('button', { name: 'Approve submission' });
       fireEvent.click(approveButton);
+
+      // Click confirm in dialog
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm');
+      fireEvent.click(confirmButton!);
 
       await waitFor(() => {
         expect(onApprove).toHaveBeenCalledWith({
@@ -79,8 +79,12 @@ describe('ApprovalActions', () => {
 
       render(<ApprovalActions {...defaultProps} onApprove={onApprove} />);
 
+      // Click approve to open dialog, then confirm
       const approveButton = screen.getByRole('button', { name: 'Approve submission' });
       fireEvent.click(approveButton);
+
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm');
+      fireEvent.click(confirmButton!);
 
       await waitFor(() => {
         expect(onApprove).toHaveBeenCalled();
@@ -108,14 +112,22 @@ describe('ApprovalActions', () => {
   });
 
   describe('reject action', () => {
-    it('should call onReject with reason when reject button is clicked', async () => {
+    it('should call onReject with reason when reject button is clicked and confirmed', async () => {
       const onReject = vi.fn();
-      (window.prompt as any).mockReturnValue('Invalid information');
 
       render(<ApprovalActions {...defaultProps} onReject={onReject} />);
 
+      // Click reject to open dialog
       const rejectButton = screen.getByRole('button', { name: 'Reject submission' });
       fireEvent.click(rejectButton);
+
+      // Type reason in textarea
+      const textarea = screen.getByRole('textbox', { name: 'Rejection reason' });
+      fireEvent.change(textarea, { target: { value: 'Invalid information' } });
+
+      // Click confirm
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm');
+      fireEvent.click(confirmButton!);
 
       await waitFor(() => {
         expect(onReject).toHaveBeenCalledWith({
@@ -127,37 +139,40 @@ describe('ApprovalActions', () => {
       });
     });
 
-    it('should not call onReject when prompt is cancelled', async () => {
+    it('should not call onReject when dialog is cancelled', async () => {
       const onReject = vi.fn();
-      (window.prompt as any).mockReturnValue(null);
 
       render(<ApprovalActions {...defaultProps} onReject={onReject} />);
 
+      // Click reject to open dialog
       const rejectButton = screen.getByRole('button', { name: 'Reject submission' });
       fireEvent.click(rejectButton);
+
+      // Click cancel
+      const cancelButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--cancel');
+      fireEvent.click(cancelButton!);
 
       await waitFor(() => {
         expect(onReject).not.toHaveBeenCalled();
       });
     });
 
-    it('should not call onReject when reason is empty', async () => {
+    it('should not allow confirming reject with empty reason', async () => {
       const onReject = vi.fn();
-      (window.prompt as any).mockReturnValue('');
 
       render(<ApprovalActions {...defaultProps} onReject={onReject} />);
 
+      // Click reject to open dialog
       const rejectButton = screen.getByRole('button', { name: 'Reject submission' });
       fireEvent.click(rejectButton);
 
-      await waitFor(() => {
-        expect(onReject).not.toHaveBeenCalled();
-      });
+      // Confirm button should be disabled when textarea is empty
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm') as HTMLButtonElement;
+      expect(confirmButton.disabled).toBe(true);
     });
 
     it('should not call onReject when button is disabled', () => {
       const onReject = vi.fn();
-      (window.prompt as any).mockReturnValue('Test reason');
 
       render(<ApprovalActions {...defaultProps} onReject={onReject} disabled />);
 
@@ -170,14 +185,22 @@ describe('ApprovalActions', () => {
   });
 
   describe('request changes action', () => {
-    it('should call onRequestChanges when request changes button is clicked', async () => {
+    it('should call onRequestChanges when request changes button is clicked and confirmed', async () => {
       const onRequestChanges = vi.fn();
-      (window.prompt as any).mockReturnValue('Please update the vendor name');
 
       render(<ApprovalActions {...defaultProps} onRequestChanges={onRequestChanges} />);
 
+      // Click request changes to open dialog
       const requestChangesButton = screen.getByRole('button', { name: 'Request changes to submission' });
       fireEvent.click(requestChangesButton);
+
+      // Type feedback in textarea
+      const textarea = screen.getByRole('textbox', { name: 'Change feedback' });
+      fireEvent.change(textarea, { target: { value: 'Please update the vendor name' } });
+
+      // Click confirm
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm');
+      fireEvent.click(confirmButton!);
 
       await waitFor(() => {
         expect(onRequestChanges).toHaveBeenCalledWith({
@@ -190,14 +213,18 @@ describe('ApprovalActions', () => {
       });
     });
 
-    it('should not call onRequestChanges when prompt is cancelled', async () => {
+    it('should not call onRequestChanges when dialog is cancelled', async () => {
       const onRequestChanges = vi.fn();
-      (window.prompt as any).mockReturnValue(null);
 
       render(<ApprovalActions {...defaultProps} onRequestChanges={onRequestChanges} />);
 
+      // Click request changes to open dialog
       const requestChangesButton = screen.getByRole('button', { name: 'Request changes to submission' });
       fireEvent.click(requestChangesButton);
+
+      // Click cancel
+      const cancelButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--cancel');
+      fireEvent.click(cancelButton!);
 
       await waitFor(() => {
         expect(onRequestChanges).not.toHaveBeenCalled();
@@ -206,7 +233,6 @@ describe('ApprovalActions', () => {
 
     it('should not call onRequestChanges when button is disabled', () => {
       const onRequestChanges = vi.fn();
-      (window.prompt as any).mockReturnValue('Test feedback');
 
       render(<ApprovalActions {...defaultProps} onRequestChanges={onRequestChanges} disabled />);
 
@@ -448,14 +474,15 @@ describe('ApprovalActions', () => {
 
       const approveButton = screen.getByRole('button', { name: 'Approve submission' });
 
-      // Click multiple times rapidly
-      fireEvent.click(approveButton);
-      fireEvent.click(approveButton);
+      // Click approve to open dialog
       fireEvent.click(approveButton);
 
-      // Should be called 3 times (no debouncing in this basic implementation)
+      // Confirm in the dialog
+      const confirmButton = screen.getByRole('dialog').querySelector('.formbridge-dialog__btn--confirm');
+      fireEvent.click(confirmButton!);
+
       await waitFor(() => {
-        expect(onApprove).toHaveBeenCalledTimes(3);
+        expect(onApprove).toHaveBeenCalledTimes(1);
       });
     });
   });

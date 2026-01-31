@@ -5,7 +5,7 @@
  * and per-step validation.
  */
 
-import React from "react";
+import React, { useRef, useEffect } from "react";
 import type { StepDefinition, StepFieldSchema } from "../core/step-validator.js";
 import { useWizardNavigation } from "../hooks/useWizardNavigation.js";
 import { StepIndicator } from "./StepIndicator.js";
@@ -33,6 +33,22 @@ export function WizardForm({
 }: WizardFormProps): React.ReactElement {
   const [state, actions] = useWizardNavigation(steps, formValues, fieldSchemas);
   const [errors, setErrors] = React.useState<Array<{ field: string; message: string }>>([]);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const prevStepRef = useRef<string | undefined>(undefined);
+
+  // Focus the first focusable element when stepping to a new step
+  useEffect(() => {
+    const stepId = state.currentStep?.id;
+    if (stepId && stepId !== prevStepRef.current && contentRef.current) {
+      const focusable = contentRef.current.querySelector<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      );
+      if (focusable) {
+        focusable.focus();
+      }
+    }
+    prevStepRef.current = stepId;
+  }, [state.currentStep?.id]);
 
   const handleNext = () => {
     const result = actions.next();
@@ -70,7 +86,18 @@ export function WizardForm({
     }),
     React.createElement(
       "div",
-      { className: "formbridge-wizard__content" },
+      {
+        "aria-live": "polite",
+        "aria-atomic": "true",
+        style: { position: "absolute" as const, width: "1px", height: "1px", overflow: "hidden", clip: "rect(0,0,0,0)", whiteSpace: "nowrap" as const },
+      },
+      state.currentStep
+        ? `Step ${state.currentIndex + 1} of ${state.visibleSteps.length}: ${state.currentStep.title}`
+        : null
+    ),
+    React.createElement(
+      "div",
+      { ref: contentRef, className: "formbridge-wizard__content" },
       state.currentStep
         ? renderStep(state.currentStep, errors)
         : null

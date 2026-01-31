@@ -3,7 +3,7 @@
  * Supports repeatable field groups for dynamic lists
  */
 
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import type { ArrayFieldProps, FieldMetadata } from '../../types/index';
 
 /**
@@ -67,7 +67,7 @@ export const ArrayField: React.FC<
       index?: number
     ) => React.ReactNode;
   }
-> = ({
+> = React.memo(({
   path,
   metadata,
   value = [],
@@ -85,6 +85,25 @@ export const ArrayField: React.FC<
 
   // Ensure value is always an array
   const arrayValue = Array.isArray(value) ? value : [];
+
+  // Focus management: track which item to focus after add/remove
+  const itemsRef = useRef<HTMLDivElement>(null);
+  const focusIndexRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (focusIndexRef.current != null && itemsRef.current) {
+      const items = itemsRef.current.querySelectorAll<HTMLElement>('[role="listitem"]');
+      const target = items[focusIndexRef.current];
+      if (target) {
+        // Focus the first focusable element inside the item (input, button, etc.)
+        const focusable = target.querySelector<HTMLElement>(
+          'input, select, textarea, button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        );
+        (focusable ?? target).focus();
+      }
+      focusIndexRef.current = null;
+    }
+  });
 
   // Handle adding a new item
   const handleAdd = () => {
@@ -108,6 +127,8 @@ export const ArrayField: React.FC<
       defaultValue = [];
     }
 
+    // Focus the newly added item after render
+    focusIndexRef.current = arrayValue.length;
     onChange([...arrayValue, defaultValue]);
   };
 
@@ -118,7 +139,12 @@ export const ArrayField: React.FC<
       return;
     }
 
+    // Focus the previous item (or first item if removing the first one)
+    focusIndexRef.current = index > 0 ? index - 1 : 0;
     const newValue = arrayValue.filter((_, i) => i !== index);
+    if (newValue.length === 0) {
+      focusIndexRef.current = null; // Nothing to focus — the add button will be focused
+    }
     onChange(newValue);
   };
 
@@ -195,6 +221,7 @@ export const ArrayField: React.FC<
         )}
 
         <div
+          ref={itemsRef}
           className="formbridge-array-field__items"
           role="list"
           aria-label={`${label} items`}
@@ -329,6 +356,6 @@ export const ArrayField: React.FC<
       </fieldset>
     </div>
   );
-};
+});
 
 ArrayField.displayName = 'ArrayField';

@@ -3,7 +3,7 @@
  * Displays which actor (agent, human, system) filled each field
  */
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { FieldWrapper } from './FieldWrapper';
 import { ReviewerView } from './ReviewerView';
 import { ArrayField } from './fields/ArrayField';
@@ -173,27 +173,52 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
   approvalActions,
 }) => {
   const [localFields, setLocalFields] = useState<Record<string, unknown>>(fields);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Sync local state when the fields prop changes (e.g., after refetch)
   useEffect(() => {
     setLocalFields(fields);
   }, [fields]);
 
+  // Focus the first invalid field when errors appear
+  const prevErrorCountRef = useRef(0);
+  useEffect(() => {
+    const errorKeys = Object.keys(errors);
+    if (errorKeys.length > 0 && prevErrorCountRef.current === 0 && formRef.current) {
+      // Find the first field with aria-invalid or matching the first error key
+      const firstInvalid = formRef.current.querySelector<HTMLElement>(
+        '[aria-invalid="true"], .formbridge-field--error input, .formbridge-field--error select, .formbridge-field--error textarea'
+      );
+      if (firstInvalid) {
+        firstInvalid.focus();
+      } else {
+        // Fallback: focus by field ID
+        const firstErrorPath = errorKeys[0]!;
+        const el = formRef.current.querySelector<HTMLElement>(`#field-${firstErrorPath.replace(/\./g, '-')}`);
+        el?.focus();
+      }
+    }
+    prevErrorCountRef.current = errorKeys.length;
+  }, [errors]);
+
   /**
    * Handle field value change
+   * Uses functional setState to avoid dependency on localFields,
+   * keeping the callback reference stable across renders.
    */
   const handleFieldChange = useCallback(
     (fieldPath: string, value: unknown) => {
-      // Update local state using nested-aware setter
-      const newFields = fieldPath.includes('.')
-        ? setNestedValue(localFields, fieldPath, value)
-        : { ...localFields, [fieldPath]: value };
-      setLocalFields(newFields);
+      // Update local state using functional form — no dependency on localFields
+      setLocalFields((prev) =>
+        fieldPath.includes('.')
+          ? setNestedValue(prev, fieldPath, value)
+          : { ...prev, [fieldPath]: value }
+      );
 
       // Notify parent component
       onFieldChange?.(fieldPath, value, currentActor);
     },
-    [localFields, currentActor, onFieldChange]
+    [currentActor, onFieldChange]
   );
 
   /**
@@ -409,6 +434,7 @@ export const FormBridgeForm: React.FC<FormBridgeFormProps> = ({
 
   return (
     <form
+      ref={formRef}
       className={`formbridge-form ${className}`.trim()}
       onSubmit={handleSubmit}
       noValidate

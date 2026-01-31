@@ -238,37 +238,85 @@ export function validateForm(
 }
 
 /**
- * Validate a single field value
+ * Cache for per-field sub-schema validators
+ * Key: parentSchemaKey + fieldPath
+ */
+const fieldValidatorCache = new Map<string, ValidateFunction>();
+
+/**
+ * Get or create a validator for a single field's sub-schema.
+ * Extracts the field's property schema and wraps it in a minimal object schema.
+ */
+function getFieldValidator(schema: IntakeSchema, path: FieldPath): ValidateFunction | null {
+  const parentKey = schema.$id || JSON.stringify(schema);
+  const cacheKey = `${parentKey}::${path}`;
+
+  let validator = fieldValidatorCache.get(cacheKey);
+  if (validator) return validator;
+
+  // Navigate to the field's property schema
+  const segments = path.split('.');
+  let current: Record<string, unknown> | undefined = schema as unknown as Record<string, unknown>;
+
+  for (const segment of segments) {
+    const props = current?.['properties'] as Record<string, Record<string, unknown>> | undefined;
+    if (!props || !props[segment]) return null;
+    current = props[segment];
+  }
+
+  if (!current) return null;
+
+  // Build a minimal object schema that validates just this field
+  const fieldName = segments[segments.length - 1] as string;
+  const isRequired = Array.isArray(schema.required) && schema.required.includes(path);
+
+  const subSchema: Record<string, unknown> = {
+    type: 'object',
+    properties: { [fieldName]: current },
+    ...(isRequired ? { required: [fieldName] } : {}),
+  };
+
+  validator = ajv.compile(subSchema);
+  fieldValidatorCache.set(cacheKey, validator);
+  return validator;
+}
+
+/**
+ * Validate a single field value against its sub-schema.
+ * Only validates the target field, not the entire form — O(1) per field.
  * @param schema - The IntakeSchema
  * @param path - The field path (dot notation)
  * @param value - The field value to validate
- * @param data - The complete form data (for context)
+ * @param _data - The complete form data (unused, kept for API compat)
  * @returns Validation result for the field
  */
 export function validateField(
   schema: IntakeSchema,
   path: FieldPath,
-  _value: unknown,
-  data: FormData
+  value: unknown,
+  _data: FormData
 ): ValidationResult {
-  // Validate the entire form to get all errors
-  const result = validateForm(schema, data);
+  const validator = getFieldValidator(schema, path);
 
-  if (result.valid) {
-    return { valid: true };
+  // If no sub-schema found, fall back to full validation
+  if (!validator) {
+    const result = validateForm(schema, _data);
+    if (result.valid) return { valid: true };
+    const fieldErrors = result.errors?.filter((error) => error.path === path);
+    if (!fieldErrors || fieldErrors.length === 0) return { valid: true };
+    return { valid: false, errors: fieldErrors };
   }
 
-  // Filter errors for this specific field
-  const fieldErrors = result.errors?.filter((error) => error.path === path);
+  // Validate only this field's data in a minimal wrapper object
+  const fieldName = path.split('.').pop() as string;
+  const valid = validator({ [fieldName]: value });
 
-  if (!fieldErrors || fieldErrors.length === 0) {
-    return { valid: true };
-  }
+  if (valid) return { valid: true };
 
-  return {
-    valid: false,
-    errors: fieldErrors,
-  };
+  const errors = (validator.errors || []).map(convertAjvError);
+  return errors.length === 0
+    ? { valid: true }
+    : { valid: false, errors };
 }
 
 /**
@@ -332,6 +380,7 @@ export function hasFieldError(
  */
 export function clearValidatorCache(): void {
   validatorCache.clear();
+  fieldValidatorCache.clear();
 }
 
 /**

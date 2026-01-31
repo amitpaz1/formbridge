@@ -120,7 +120,7 @@ function isImageFile(file: File): boolean {
  * />
  * ```
  */
-export const FileField: React.FC<FileFieldProps> = ({
+export const FileField: React.FC<FileFieldProps> = React.memo(({
   path,
   metadata,
   value,
@@ -562,6 +562,6 @@ export const FileField: React.FC<FileFieldProps> = ({
       </div>
     </FieldWrapper>
   );
-};
+});
 
 FileField.displayName = 'FileField';
