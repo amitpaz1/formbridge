@@ -116,9 +116,9 @@ export class S3StorageBackend implements StorageBackend {
   private initializeS3Client(): void {
     try {
       // Dynamic import to avoid hard dependency
-       
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { S3Client } = require('@aws-sdk/client-s3');
-       
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
       const clientConfig: any = {
@@ -141,7 +141,7 @@ export class S3StorageBackend implements StorageBackend {
 
       this.s3Client = new S3Client(clientConfig);
       this.getSignedUrl = getSignedUrl;
-    } catch (error) {
+    } catch {
       throw new Error(
         'S3StorageBackend requires @aws-sdk/client-s3 and @aws-sdk/s3-request-presigner. ' +
         'Install them with: npm install @aws-sdk/client-s3 @aws-sdk/s3-request-presigner'
@@ -182,7 +182,7 @@ export class S3StorageBackend implements StorageBackend {
     mimeType: string;
     constraints: UploadConstraints;
   }): Promise<SignedUploadUrl> {
-     
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { PutObjectCommand } = require('@aws-sdk/client-s3');
 
     const uploadId = this.generateUploadId();
@@ -258,7 +258,7 @@ export class S3StorageBackend implements StorageBackend {
    * Checks S3 object existence, size constraints, and metadata.
    */
   async verifyUpload(uploadId: string): Promise<UploadStatusResult> {
-     
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { HeadObjectCommand } = require('@aws-sdk/client-s3');
 
     const metadata = this.uploads.get(uploadId);
@@ -385,6 +385,7 @@ export class S3StorageBackend implements StorageBackend {
     expiresInSeconds: number = 3600
   ): Promise<string | undefined> {
      
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { GetObjectCommand } = require('@aws-sdk/client-s3');
 
     const metadata = this.uploads.get(uploadId);
@@ -410,6 +411,7 @@ export class S3StorageBackend implements StorageBackend {
    */
   async deleteUpload(uploadId: string): Promise<boolean> {
      
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
     const metadata = this.uploads.get(uploadId);
@@ -430,7 +432,7 @@ export class S3StorageBackend implements StorageBackend {
       this.uploads.delete(uploadId);
 
       return true;
-    } catch (error) {
+    } catch {
       // Object might not exist, but we still remove metadata
       this.uploads.delete(uploadId);
       return false;

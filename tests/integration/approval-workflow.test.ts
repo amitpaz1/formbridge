@@ -45,6 +45,13 @@ class MockSubmissionStore {
     return this.submissionsByToken.get(resumeToken) || null;
   }
 
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    for (const sub of this.submissions.values()) {
+      if (sub.idempotencyKey === key) return sub;
+    }
+    return null;
+  }
+
   clear() {
     this.submissions.clear();
     this.submissionsByToken.clear();

@@ -34,6 +34,13 @@ class InMemorySubmissionStore {
     return this.submissionsByToken.get(resumeToken) || null;
   }
 
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    for (const sub of this.submissions.values()) {
+      if (sub.idempotencyKey === key) return sub;
+    }
+    return null;
+  }
+
   clear() {
     this.submissions.clear();
     this.submissionsByToken.clear();
@@ -131,10 +138,15 @@ describe("Agent-to-Human Handoff Integration", () => {
         ? setFieldsResponse.resumeToken
         : createResponse.resumeToken;
 
-      // Verify field.updated events were emitted for each field
-      const fieldUpdatedEvents = eventEmitter.getEventsByType("field.updated");
-      expect(fieldUpdatedEvents).toHaveLength(5); // 5 fields updated
-      expect(fieldUpdatedEvents.every((e) => e.actor === agentActor)).toBe(true);
+      // Verify fields.updated batch events were emitted
+      const fieldsUpdatedEvents = eventEmitter.getEventsByType("fields.updated");
+      expect(fieldsUpdatedEvents.length).toBeGreaterThan(0);
+      expect(fieldsUpdatedEvents.every((e) => e.actor === agentActor)).toBe(true);
+      // Total diffs across all batch events should equal 5 fields
+      const totalDiffs = fieldsUpdatedEvents.reduce(
+        (sum, e) => sum + ((e.payload?.diffs as unknown[])?.length ?? 0), 0
+      );
+      expect(totalDiffs).toBe(5);
 
       // Verify field attribution was recorded
       const submission = await store.get(createResponse.submissionId);
@@ -479,7 +491,7 @@ describe("Agent-to-Human Handoff Integration", () => {
       // Verify complete event history
       const allEvents = finalSubmission!.events;
       expect(allEvents.some((e) => e.type === "submission.created")).toBe(true);
-      expect(allEvents.some((e) => e.type === "field.updated")).toBe(true);
+      expect(allEvents.some((e) => e.type === "fields.updated")).toBe(true);
       expect(allEvents.some((e) => e.type === "handoff.link_issued")).toBe(true);
 
       // Verify handoff event has correct payload

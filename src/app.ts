@@ -227,7 +227,7 @@ export function createFormBridgeAppWithIntakes(
     }
 
     // For submissions with no initial fields, omit missingFields
-    const { missingFields, ...rest } = result as any;
+    const { missingFields: _missingFields, ...rest } = result as unknown as Record<string, unknown>;
     return c.json(rest, 201);
   });
 

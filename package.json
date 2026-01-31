@@ -22,6 +22,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
     "clean": "rm -rf dist"
   },
   "keywords": [
@@ -33,8 +34,16 @@
     "ai-agent",
     "tool-server"
   ],
-  "author": "FormBridge",
+  "author": "Amit Paz",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/amitpaz1/formbridge.git"
+  },
+  "homepage": "https://github.com/amitpaz1/formbridge#readme",
+  "bugs": {
+    "url": "https://github.com/amitpaz1/formbridge/issues"
+  },
   "dependencies": {
     "@hono/node-server": "^1.19.9",
     "@modelcontextprotocol/sdk": "^1.0.0",

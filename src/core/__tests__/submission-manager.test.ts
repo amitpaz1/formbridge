@@ -16,6 +16,7 @@ import type { Submission } from "../../types";
 class MockSubmissionStore {
   private submissions = new Map<string, Submission>();
   private submissionsByToken = new Map<string, Submission>();
+  private submissionsByIdempotencyKey = new Map<string, Submission>();
 
   async get(submissionId: string): Promise<Submission | null> {
     return this.submissions.get(submissionId) || null;
@@ -23,16 +24,30 @@ class MockSubmissionStore {
 
   async save(submission: Submission): Promise<void> {
     this.submissions.set(submission.id, submission);
+    // Clean up stale resume token entries
+    for (const [token, sub] of this.submissionsByToken.entries()) {
+      if (sub.id === submission.id) {
+        this.submissionsByToken.delete(token);
+      }
+    }
     this.submissionsByToken.set(submission.resumeToken, submission);
+    if (submission.idempotencyKey) {
+      this.submissionsByIdempotencyKey.set(submission.idempotencyKey, submission);
+    }
   }
 
   async getByResumeToken(resumeToken: string): Promise<Submission | null> {
     return this.submissionsByToken.get(resumeToken) || null;
   }
 
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    return this.submissionsByIdempotencyKey.get(key) || null;
+  }
+
   clear() {
     this.submissions.clear();
     this.submissionsByToken.clear();
+    this.submissionsByIdempotencyKey.clear();
   }
 }
 
@@ -166,12 +181,12 @@ describe("SubmissionManager", () => {
       // Verify updatedBy reflects most recent actor
       expect(submission!.updatedBy).toEqual(humanActor);
 
-      // Verify field.updated events were emitted
-      expect(eventEmitter.events).toHaveLength(2);
-      expect(eventEmitter.events[0].type).toBe("field.updated");
-      expect(eventEmitter.events[0].payload?.fieldPath).toBe("contactEmail");
-      expect(eventEmitter.events[1].type).toBe("field.updated");
-      expect(eventEmitter.events[1].payload?.fieldPath).toBe("phoneNumber");
+      // Verify single batch fields.updated event was emitted
+      expect(eventEmitter.events).toHaveLength(1);
+      expect(eventEmitter.events[0].type).toBe("fields.updated");
+      expect(eventEmitter.events[0].payload?.diffs).toHaveLength(2);
+      expect(eventEmitter.events[0].payload?.diffs[0].fieldPath).toBe("contactEmail");
+      expect(eventEmitter.events[0].payload?.diffs[1].fieldPath).toBe("phoneNumber");
     });
 
     it("should allow agent to overwrite human fields", async () => {
@@ -307,30 +322,29 @@ describe("SubmissionManager", () => {
 
       await manager.setFields(setFieldsRequest);
 
-      // Verify field.updated events contain oldValue and newValue
-      expect(eventEmitter.events).toHaveLength(2);
+      // Verify single batch fields.updated event with diffs
+      expect(eventEmitter.events).toHaveLength(1);
 
-      // First event: companyName update (has oldValue)
-      const companyNameEvent = eventEmitter.events.find(
-        (e) => e.payload?.fieldPath === "companyName"
-      );
-      expect(companyNameEvent).toBeDefined();
-      expect(companyNameEvent!.type).toBe("field.updated");
-      expect(companyNameEvent!.payload?.fieldPath).toBe("companyName");
-      expect(companyNameEvent!.payload?.oldValue).toBe("Original Name");
-      expect(companyNameEvent!.payload?.newValue).toBe("Updated Name");
-      expect(companyNameEvent!.actor).toEqual(humanActor);
+      const batchEvent = eventEmitter.events[0];
+      expect(batchEvent.type).toBe("fields.updated");
+      expect(batchEvent.actor).toEqual(humanActor);
+      expect(batchEvent.payload?.diffs).toHaveLength(2);
 
-      // Second event: contactEmail creation (oldValue is undefined)
-      const emailEvent = eventEmitter.events.find(
-        (e) => e.payload?.fieldPath === "contactEmail"
+      // First diff: companyName update (has previousValue)
+      const companyNameDiff = batchEvent.payload?.diffs.find(
+        (d: { fieldPath: string }) => d.fieldPath === "companyName"
       );
-      expect(emailEvent).toBeDefined();
-      expect(emailEvent!.type).toBe("field.updated");
-      expect(emailEvent!.payload?.fieldPath).toBe("contactEmail");
-      expect(emailEvent!.payload?.oldValue).toBeUndefined();
-      expect(emailEvent!.payload?.newValue).toBe("new@example.com");
-      expect(emailEvent!.actor).toEqual(humanActor);
+      expect(companyNameDiff).toBeDefined();
+      expect(companyNameDiff.previousValue).toBe("Original Name");
+      expect(companyNameDiff.newValue).toBe("Updated Name");
+
+      // Second diff: contactEmail creation (previousValue is undefined)
+      const emailDiff = batchEvent.payload?.diffs.find(
+        (d: { fieldPath: string }) => d.fieldPath === "contactEmail"
+      );
+      expect(emailDiff).toBeDefined();
+      expect(emailDiff.previousValue).toBeUndefined();
+      expect(emailDiff.newValue).toBe("new@example.com");
     });
   });
 
@@ -725,10 +739,10 @@ describe("SubmissionManager", () => {
       expect(submission!.state).toBe("submitted");
     });
 
-    it("should proceed with normal submission when intake not found in registry", async () => {
+    it("should proceed with normal submission when intake is not found in registry", async () => {
       // Mock intake registry that throws IntakeNotFoundError
       const mockIntakeRegistry = {
-        getIntake: (intakeId: string) => {
+        getIntake: (_intakeId: string) => {
           throw new Error("Intake not found");
         },
       };
@@ -768,6 +782,84 @@ describe("SubmissionManager", () => {
       // Verify submission state changed to submitted
       const submission = await store.get(createResponse.submissionId);
       expect(submission!.state).toBe("submitted");
+    });
+  });
+
+  describe("resume token after PATCH", () => {
+    it("should allow lookup by new resume token after setFields rotates it", async () => {
+      // Create submission
+      const createResponse = await manager.createSubmission({
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        initialFields: { companyName: "Acme Corp" },
+      });
+
+      const originalToken = createResponse.resumeToken;
+
+      // PATCH fields (this rotates the resume token)
+      const setResult = await manager.setFields({
+        submissionId: createResponse.submissionId,
+        resumeToken: originalToken,
+        actor: humanActor,
+        fields: { contactEmail: "test@example.com" },
+      });
+
+      expect(setResult.ok).toBe(true);
+      const newToken = setResult.ok ? setResult.resumeToken : "";
+      expect(newToken).not.toBe(originalToken);
+
+      // Lookup by new token should succeed
+      const found = await manager.getSubmissionByResumeToken(newToken);
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(createResponse.submissionId);
+      expect(found!.fields.contactEmail).toBe("test@example.com");
+
+      // Lookup by old token should fail (token was rotated)
+      const stale = await manager.getSubmissionByResumeToken(originalToken);
+      expect(stale).toBeNull();
+    });
+  });
+
+  describe("idempotency", () => {
+    it("should return existing submission for duplicate idempotency key", async () => {
+      const idempotencyKey = "idem_test_123";
+
+      const first = await manager.createSubmission({
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        idempotencyKey,
+        initialFields: { companyName: "Acme Corp" },
+      });
+
+      const second = await manager.createSubmission({
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        idempotencyKey,
+        initialFields: { companyName: "Different Corp" },
+      });
+
+      expect(second.submissionId).toBe(first.submissionId);
+      expect(second.resumeToken).toBe(first.resumeToken);
+
+      // Original data should be preserved, not overwritten
+      const submission = await store.get(first.submissionId);
+      expect(submission!.fields.companyName).toBe("Acme Corp");
+    });
+
+    it("should create separate submissions for different idempotency keys", async () => {
+      const first = await manager.createSubmission({
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        idempotencyKey: "key_a",
+      });
+
+      const second = await manager.createSubmission({
+        intakeId: "intake_vendor_onboarding",
+        actor: agentActor,
+        idempotencyKey: "key_b",
+      });
+
+      expect(second.submissionId).not.toBe(first.submissionId);
     });
   });
 });

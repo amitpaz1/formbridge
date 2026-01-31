@@ -15,7 +15,7 @@ import type {
   RequestChangesRequest,
   FieldComment,
 } from "../approval-manager";
-import type { Actor, IntakeEvent, IntakeError } from "../../types/intake-contract";
+import type { Actor, IntakeEvent } from "../../types/intake-contract";
 import type { Submission } from "../../types";
 
 // Mock in-memory store
@@ -34,6 +34,13 @@ class MockSubmissionStore {
 
   async getByResumeToken(resumeToken: string): Promise<Submission | null> {
     return this.submissionsByToken.get(resumeToken) || null;
+  }
+
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    for (const sub of this.submissions.values()) {
+      if (sub.idempotencyKey === key) return sub;
+    }
+    return null;
   }
 
   clear() {

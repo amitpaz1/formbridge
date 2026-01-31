@@ -3,7 +3,7 @@
  *
  * Tests the complete event stream functionality including:
  * - Event retrieval and filtering
- * - Field-level diffs in field.updated events
+ * - Field-level diffs in fields.updated events
  * - Event export in JSONL and JSON formats
  * - Append-only immutable event stream
  * - Complete audit trail from creation through submission
@@ -36,6 +36,13 @@ class InMemorySubmissionStore {
 
   async getByResumeToken(resumeToken: string): Promise<Submission | null> {
     return this.submissionsByToken.get(resumeToken) || null;
+  }
+
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    for (const sub of this.submissions.values()) {
+      if (sub.idempotencyKey === key) return sub;
+    }
+    return null;
   }
 
   clear() {
@@ -96,7 +103,7 @@ describe("Event Stream & Audit Trail Integration", () => {
   beforeEach(() => {
     store = new InMemorySubmissionStore();
     eventEmitter = new InMemoryEventEmitter();
-    manager = new SubmissionManager(store, eventEmitter, "http://localhost:3000");
+    manager = new SubmissionManager(store, eventEmitter, undefined, "http://localhost:3000");
   });
 
   describe("Complete Audit Trail", () => {
@@ -152,13 +159,13 @@ describe("Event Stream & Audit Trail Integration", () => {
       expect(createdEvents[0].submissionId).toBe(createResponse.submissionId);
       expect(createdEvents[0].state).toBe("draft");
 
-      // Verify field.updated events
-      const fieldUpdatedEvents = events.filter((e) => e.type === "field.updated");
-      expect(fieldUpdatedEvents.length).toBeGreaterThan(0);
+      // Verify fields.updated events
+      const fieldsUpdatedEvents = events.filter((e) => e.type === "fields.updated");
+      expect(fieldsUpdatedEvents.length).toBeGreaterThan(0);
 
       // Verify both agent and human field updates are tracked
-      const agentFieldEvents = fieldUpdatedEvents.filter((e) => e.actor.kind === "agent");
-      const humanFieldEvents = fieldUpdatedEvents.filter((e) => e.actor.kind === "human");
+      const agentFieldEvents = fieldsUpdatedEvents.filter((e) => e.actor.kind === "agent");
+      const humanFieldEvents = fieldsUpdatedEvents.filter((e) => e.actor.kind === "human");
 
       expect(agentFieldEvents.length).toBeGreaterThan(0);
       expect(humanFieldEvents.length).toBeGreaterThan(0);
@@ -223,19 +230,24 @@ describe("Event Stream & Audit Trail Integration", () => {
       expect(submission!.fieldAttribution.address).toEqual(agentActor);
       expect(submission!.fieldAttribution.taxId).toEqual(humanActor); // Last writer wins
 
-      // Verify field.updated events capture the correction
+      // Verify fields.updated events capture the correction
       const events = await manager.getEvents(createResponse.submissionId);
-      const taxIdEvents = events.filter(
-        (e) => e.type === "field.updated" && e.payload?.fieldPath === "taxId"
+      const fieldsUpdatedEvents = events.filter(
+        (e) => e.type === "fields.updated"
       );
-      expect(taxIdEvents).toHaveLength(2);
-      expect(taxIdEvents[0].actor).toEqual(agentActor);
-      expect(taxIdEvents[1].actor).toEqual(humanActor);
+      // Two setFields calls = two fields.updated events (one agent, one human)
+      expect(fieldsUpdatedEvents).toHaveLength(2);
+      expect(fieldsUpdatedEvents[0].actor).toEqual(agentActor);
+      expect(fieldsUpdatedEvents[1].actor).toEqual(humanActor);
+
+      // Verify human corrected taxId via diffs
+      const humanDiffs = fieldsUpdatedEvents[1].payload?.diffs as Array<{ fieldPath: string }>;
+      expect(humanDiffs.some((d) => d.fieldPath === "taxId")).toBe(true);
     });
   });
 
   describe("Field-Level Diffs", () => {
-    it("should include oldValue and newValue in field.updated events", async () => {
+    it("should include previousValue and newValue in fields.updated diffs", async () => {
       // Create submission
       const createRequest: CreateSubmissionRequest = {
         intakeId: "intake_contact_form",
@@ -257,22 +269,24 @@ describe("Event Stream & Audit Trail Integration", () => {
         },
       });
 
-      // Verify field.updated event includes diff
+      // Verify fields.updated event includes diffs
       const events = await manager.getEvents(createResponse.submissionId);
-      const nameUpdateEvents = events.filter(
-        (e) => e.type === "field.updated" && e.payload?.fieldPath === "name"
+      const fieldsUpdatedEvents = events.filter(
+        (e) => e.type === "fields.updated"
       );
 
-      expect(nameUpdateEvents.length).toBeGreaterThan(0);
-      const lastUpdate = nameUpdateEvents[nameUpdateEvents.length - 1];
+      expect(fieldsUpdatedEvents.length).toBeGreaterThan(0);
+      const lastUpdate = fieldsUpdatedEvents[fieldsUpdatedEvents.length - 1];
 
       expect(lastUpdate.payload).toBeDefined();
-      expect(lastUpdate.payload!.fieldPath).toBe("name");
-      expect(lastUpdate.payload!.oldValue).toBe("Alice Smith");
-      expect(lastUpdate.payload!.newValue).toBe("Alice Johnson");
+      const diffs = lastUpdate.payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const nameDiff = diffs.find((d) => d.fieldPath === "name");
+      expect(nameDiff).toBeDefined();
+      expect(nameDiff!.previousValue).toBe("Alice Smith");
+      expect(nameDiff!.newValue).toBe("Alice Johnson");
     });
 
-    it("should handle new field creation (oldValue undefined)", async () => {
+    it("should handle new field creation (previousValue undefined)", async () => {
       // Create submission with no initial fields
       const createRequest: CreateSubmissionRequest = {
         intakeId: "intake_form",
@@ -292,16 +306,18 @@ describe("Event Stream & Audit Trail Integration", () => {
         },
       });
 
-      // Verify field.updated event for new field
+      // Verify fields.updated event for new field
       const events = await manager.getEvents(createResponse.submissionId);
-      const emailEvents = events.filter(
-        (e) => e.type === "field.updated" && e.payload?.fieldPath === "email"
+      const fieldsUpdatedEvents = events.filter(
+        (e) => e.type === "fields.updated"
       );
 
-      expect(emailEvents).toHaveLength(1);
-      expect(emailEvents[0].payload!.fieldPath).toBe("email");
-      expect(emailEvents[0].payload!.oldValue).toBeUndefined();
-      expect(emailEvents[0].payload!.newValue).toBe("new@example.com");
+      expect(fieldsUpdatedEvents).toHaveLength(1);
+      const diffs = fieldsUpdatedEvents[0].payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const emailDiff = diffs.find((d) => d.fieldPath === "email");
+      expect(emailDiff).toBeDefined();
+      expect(emailDiff!.previousValue).toBeUndefined();
+      expect(emailDiff!.newValue).toBe("new@example.com");
     });
 
     it("should track multiple field updates with complete diff history", async () => {
@@ -336,23 +352,27 @@ describe("Event Stream & Audit Trail Integration", () => {
         },
       });
 
-      // Verify complete diff history
+      // Verify complete diff history via batch events
       const events = await manager.getEvents(createResponse.submissionId);
-      const statusEvents = events.filter(
-        (e) => e.type === "field.updated" && e.payload?.fieldPath === "status"
+      const fieldsUpdatedEvents = events.filter(
+        (e) => e.type === "fields.updated"
       );
 
-      expect(statusEvents).toHaveLength(2);
+      expect(fieldsUpdatedEvents).toHaveLength(2);
 
       // First update: draft -> pending
-      expect(statusEvents[0].payload!.oldValue).toBe("draft");
-      expect(statusEvents[0].payload!.newValue).toBe("pending");
-      expect(statusEvents[0].actor).toEqual(agentActor);
+      const diffs1 = fieldsUpdatedEvents[0].payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const statusDiff1 = diffs1.find((d) => d.fieldPath === "status")!;
+      expect(statusDiff1.previousValue).toBe("draft");
+      expect(statusDiff1.newValue).toBe("pending");
+      expect(fieldsUpdatedEvents[0].actor).toEqual(agentActor);
 
       // Second update: pending -> approved
-      expect(statusEvents[1].payload!.oldValue).toBe("pending");
-      expect(statusEvents[1].payload!.newValue).toBe("approved");
-      expect(statusEvents[1].actor).toEqual(humanActor);
+      const diffs2 = fieldsUpdatedEvents[1].payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const statusDiff2 = diffs2.find((d) => d.fieldPath === "status")!;
+      expect(statusDiff2.previousValue).toBe("pending");
+      expect(statusDiff2.newValue).toBe("approved");
+      expect(fieldsUpdatedEvents[1].actor).toEqual(humanActor);
     });
   });
 
@@ -384,7 +404,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       // Get events and verify different event types exist
       const allEvents = await manager.getEvents(createResponse.submissionId);
       const createdEvents = allEvents.filter((e) => e.type === "submission.created");
-      const fieldEvents = allEvents.filter((e) => e.type === "field.updated");
+      const fieldEvents = allEvents.filter((e) => e.type === "fields.updated");
       const handoffEvents = allEvents.filter((e) => e.type === "handoff.link_issued");
 
       expect(createdEvents.length).toBe(1);
@@ -596,7 +616,7 @@ describe("Event Stream & Audit Trail Integration", () => {
 
         // Payload is optional but should be defined for certain event types
         if (
-          event.type === "field.updated" ||
+          event.type === "fields.updated" ||
           event.type === "handoff.link_issued"
         ) {
           expect(event.payload).toBeDefined();
@@ -701,7 +721,7 @@ describe("Event Stream & Audit Trail Integration", () => {
       expect(events).toBeDefined();
       expect(events.length).toBeGreaterThan(0);
       expect(events[0].type).toBe("submission.created");
-      expect(events.some((e) => e.type === "field.updated")).toBe(true);
+      expect(events.some((e) => e.type === "fields.updated")).toBe(true);
     });
 
     it("should throw error for non-existent submission", async () => {
@@ -770,14 +790,14 @@ describe("Event Stream & Audit Trail Integration", () => {
       // Verify event types are present
       const eventTypes = new Set(allEvents.map((e) => e.type));
       expect(eventTypes.has("submission.created")).toBe(true);
-      expect(eventTypes.has("field.updated")).toBe(true);
+      expect(eventTypes.has("fields.updated")).toBe(true);
       expect(eventTypes.has("submission.submitted")).toBe(true);
 
       // Step 5: Filter by type
-      const fieldUpdatedEvents = allEvents.filter(
-        (e) => e.type === "field.updated"
+      const fieldsUpdatedEvents = allEvents.filter(
+        (e) => e.type === "fields.updated"
       );
-      expect(fieldUpdatedEvents.length).toBeGreaterThan(0);
+      expect(fieldsUpdatedEvents.length).toBeGreaterThan(0);
 
       const submittedEvents = allEvents.filter(
         (e) => e.type === "submission.submitted"
@@ -825,11 +845,10 @@ describe("Event Stream & Audit Trail Integration", () => {
         expect(event.actor.name).toBeDefined();
 
         // Verify payloads for specific event types
-        if (event.type === "field.updated") {
+        if (event.type === "fields.updated") {
           expect(event.payload).toBeDefined();
-          expect(event.payload!.fieldPath).toBeDefined();
-          expect(event.payload!.newValue).toBeDefined();
-          // oldValue can be undefined for new fields
+          expect(event.payload!.diffs).toBeDefined();
+          expect(Array.isArray(event.payload!.diffs)).toBe(true);
         }
 
         if (event.type === "submission.created") {
@@ -848,31 +867,28 @@ describe("Event Stream & Audit Trail Integration", () => {
         expect(event.state).toBeDefined();
       });
 
-      // Verify field-level diffs in field.updated events
-      const departmentUpdates = fieldUpdatedEvents.filter(
-        (e) => e.payload?.fieldPath === "department"
-      );
-      expect(departmentUpdates.length).toBe(2);
+      // Verify field-level diffs in fields.updated events
+      // Agent update: department, startDate, salary
+      const agentDiffs = fieldsUpdatedEvents[0].payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const agentDeptDiff = agentDiffs.find((d) => d.fieldPath === "department")!;
+      expect(agentDeptDiff.previousValue).toBeUndefined();
+      expect(agentDeptDiff.newValue).toBe("Engineering");
+      expect(fieldsUpdatedEvents[0].actor).toEqual(agentActor);
 
-      // First update: undefined -> "Engineering" (agent)
-      expect(departmentUpdates[0].payload!.oldValue).toBeUndefined();
-      expect(departmentUpdates[0].payload!.newValue).toBe("Engineering");
-      expect(departmentUpdates[0].actor).toEqual(agentActor);
+      const agentSalaryDiff = agentDiffs.find((d) => d.fieldPath === "salary")!;
+      expect(agentSalaryDiff.previousValue).toBeUndefined();
+      expect(agentSalaryDiff.newValue).toBe("100000");
 
-      // Second update: "Engineering" -> "Product Engineering" (human)
-      expect(departmentUpdates[1].payload!.oldValue).toBe("Engineering");
-      expect(departmentUpdates[1].payload!.newValue).toBe("Product Engineering");
-      expect(departmentUpdates[1].actor).toEqual(humanActor);
+      // Human update: department correction, salary correction
+      const humanDiffs = fieldsUpdatedEvents[1].payload!.diffs as Array<{ fieldPath: string; previousValue: unknown; newValue: unknown }>;
+      const humanDeptDiff = humanDiffs.find((d) => d.fieldPath === "department")!;
+      expect(humanDeptDiff.previousValue).toBe("Engineering");
+      expect(humanDeptDiff.newValue).toBe("Product Engineering");
+      expect(fieldsUpdatedEvents[1].actor).toEqual(humanActor);
 
-      // Verify salary updates
-      const salaryUpdates = fieldUpdatedEvents.filter(
-        (e) => e.payload?.fieldPath === "salary"
-      );
-      expect(salaryUpdates.length).toBe(2);
-      expect(salaryUpdates[0].payload!.oldValue).toBeUndefined();
-      expect(salaryUpdates[0].payload!.newValue).toBe("100000");
-      expect(salaryUpdates[1].payload!.oldValue).toBe("100000");
-      expect(salaryUpdates[1].payload!.newValue).toBe("120000");
+      const humanSalaryDiff = humanDiffs.find((d) => d.fieldPath === "salary")!;
+      expect(humanSalaryDiff.previousValue).toBe("100000");
+      expect(humanSalaryDiff.newValue).toBe("120000");
 
       // Verify complete audit trail compliance
       // - Events are append-only (no modifications)
@@ -980,7 +996,7 @@ describe("Event Stream & Audit Trail Integration", () => {
   });
 
   describe("Structured Diffs in Field Updates", () => {
-    it("should include diffs array in field.updated event payloads", async () => {
+    it("should include diffs array in fields.updated event payloads", async () => {
       const createResponse = await manager.createSubmission({
         intakeId: "intake_diffs",
         actor: agentActor,
@@ -995,18 +1011,18 @@ describe("Event Stream & Audit Trail Integration", () => {
       });
 
       const events = await manager.getEvents(createResponse.submissionId);
-      const fieldUpdatedEvents = events.filter((e) => e.type === "field.updated");
+      const fieldsUpdatedEvents = events.filter((e) => e.type === "fields.updated");
 
-      // Each field.updated event should include a diffs array
-      fieldUpdatedEvents.forEach((event) => {
+      // Each fields.updated event should include a diffs array
+      fieldsUpdatedEvents.forEach((event) => {
         expect(event.payload).toBeDefined();
         expect(event.payload!.diffs).toBeDefined();
         expect(Array.isArray(event.payload!.diffs)).toBe(true);
       });
 
-      // The diffs array should contain all field changes from the setFields call
-      const firstUpdate = fieldUpdatedEvents[fieldUpdatedEvents.length - 2]; // name update
-      const diffs = firstUpdate.payload!.diffs as Array<{
+      // The single batch event should contain all field changes from the setFields call
+      const batchEvent = fieldsUpdatedEvents[fieldsUpdatedEvents.length - 1];
+      const diffs = batchEvent.payload!.diffs as Array<{
         fieldPath: string;
         previousValue: unknown;
         newValue: unknown;
@@ -1041,8 +1057,8 @@ describe("Event Stream & Audit Trail Integration", () => {
       });
 
       const events = await manager.getEvents(createResponse.submissionId);
-      const fieldUpdatedEvents = events.filter((e) => e.type === "field.updated");
-      const lastEvent = fieldUpdatedEvents[fieldUpdatedEvents.length - 1];
+      const fieldsUpdatedEvents = events.filter((e) => e.type === "fields.updated");
+      const lastEvent = fieldsUpdatedEvents[fieldsUpdatedEvents.length - 1];
 
       const diffs = lastEvent.payload!.diffs as Array<{
         fieldPath: string;

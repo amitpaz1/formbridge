@@ -177,6 +177,7 @@ export interface IntakeError {
 export type IntakeEventType =
   | "submission.created"
   | "field.updated"
+  | "fields.updated"
   | "validation.passed"
   | "validation.failed"
   | "upload.requested"

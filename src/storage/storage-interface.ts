@@ -45,6 +45,7 @@ export interface PaginationOptions {
 export interface SubmissionStorage {
   get(id: string): Promise<Submission | null>;
   getByResumeToken(token: string): Promise<Submission | null>;
+  getByIdempotencyKey(key: string): Promise<Submission | null>;
   save(submission: Submission): Promise<void>;
   delete(id: string): Promise<boolean>;
   list(

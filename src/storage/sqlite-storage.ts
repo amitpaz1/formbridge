@@ -65,6 +65,14 @@ class SqliteSubmissionStorage implements SubmissionStorage {
     return JSON.parse(row.data);
   }
 
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    const row = this.db
+      .prepare("SELECT data FROM submissions WHERE idempotencyKey = ?")
+      .get(key) as { data: string } | undefined;
+    if (!row) return null;
+    return JSON.parse(row.data);
+  }
+
   async save(submission: Submission): Promise<void> {
     const data = JSON.stringify(submission);
     this.db

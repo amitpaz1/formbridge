@@ -46,6 +46,7 @@ export interface SubmissionStore {
   get(submissionId: string): Promise<Submission | null>;
   save(submission: Submission): Promise<void>;
   getByResumeToken(resumeToken: string): Promise<Submission | null>;
+  getByIdempotencyKey(key: string): Promise<Submission | null>;
 }
 
 export interface EventEmitter {
@@ -148,6 +149,21 @@ export class SubmissionManager {
   async createSubmission(
     request: CreateSubmissionRequest
   ): Promise<CreateSubmissionResponse> {
+    // Idempotency check: return existing submission if key matches
+    if (request.idempotencyKey) {
+      const existing = await this.store.getByIdempotencyKey(request.idempotencyKey);
+      if (existing) {
+        return {
+          ok: true,
+          submissionId: existing.id,
+          state: existing.state as "draft" | "in_progress",
+          resumeToken: existing.resumeToken,
+          schema: {},
+          missingFields: [],
+        };
+      }
+    }
+
     const submissionId = `sub_${randomUUID()}`;
     const resumeToken = `rtok_${randomUUID()}`;
     const now = new Date().toISOString();
@@ -308,25 +324,20 @@ export class SubmissionManager {
       newValue: u.newValue,
     }));
 
-    // Emit field.updated event for each field
-    for (const fieldUpdate of fieldUpdates) {
-      const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
-        type: "field.updated",
-        submissionId: submission.id,
-        ts: now,
-        actor: request.actor,
-        state: submission.state,
-        payload: {
-          fieldPath: fieldUpdate.fieldPath,
-          oldValue: fieldUpdate.oldValue,
-          newValue: fieldUpdate.newValue,
-          diffs,
-        },
-      };
+    // Emit a single batch fields.updated event for all field changes
+    const event: IntakeEvent = {
+      eventId: `evt_${randomUUID()}`,
+      type: "fields.updated",
+      submissionId: submission.id,
+      ts: now,
+      actor: request.actor,
+      state: submission.state,
+      payload: {
+        diffs,
+      },
+    };
 
-      await this.recordEvent(submission, event);
-    }
+    await this.recordEvent(submission, event);
 
     return {
       ok: true,

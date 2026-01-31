@@ -85,6 +85,18 @@ export class InMemorySubmissionStore implements ISubmissionStore {
   }
 
   /**
+   * Get submission by idempotency key
+   */
+  async getByIdempotencyKey(key: string): Promise<Submission | null> {
+    for (const entry of this.submissions.values()) {
+      if (entry.submission.idempotencyKey === key) {
+        return entry.submission;
+      }
+    }
+    return null;
+  }
+
+  /**
    * Clear all submissions (useful for testing)
    */
   clear(): void {

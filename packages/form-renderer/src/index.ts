@@ -53,6 +53,17 @@ export type {
 
 // Types
 export type {
+  // Schema types
+  IntakeSchema,
+  FormData,
+  // Actor and state types
+  Actor,
+  FormSubmissionState,
+  // Hook return types
+  UseFormSubmissionReturn,
+  // Error types
+  SubmissionError,
+  IntakeError,
   // Component prop types
   FormBridgeFormProps,
   BaseFieldProps,

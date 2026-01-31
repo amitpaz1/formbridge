@@ -224,7 +224,8 @@ export function createErrorHandler(options?: {
 
     // Add stack trace in development mode if requested
     if (includeStack && err.stack && 'error' in errorResponse) {
-      (errorResponse.error as any).stack = err.stack;
+      const errObj = errorResponse.error as Record<string, unknown>;
+      errObj.stack = err.stack;
     }
 
     return c.json(errorResponse, statusCode as ContentfulStatusCode);
