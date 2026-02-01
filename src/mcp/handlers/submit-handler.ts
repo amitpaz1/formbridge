@@ -9,6 +9,7 @@ import { validateSubmission } from '../../validation/validator.js';
 import { mapToIntakeError } from '../../validation/error-mapper.js';
 import type { SubmissionStore } from '../submission-store.js';
 import { lookupEntry, isError } from '../response-builder.js';
+import { SubmissionId } from '../../types/branded.js';
 
 export async function handleSubmit(
   intake: IntakeDefinition,
@@ -35,7 +36,7 @@ export async function handleSubmit(
 
   return {
     state: SubmissionState.COMPLETED,
-    submissionId: entry.submissionId,
+    submissionId: SubmissionId(entry.submissionId),
     message: 'Submission completed successfully',
     data: validationResult.data,
     timestamp: new Date().toISOString(),

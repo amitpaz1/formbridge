@@ -9,6 +9,7 @@
 import { z } from 'zod';
 import type { IntakeEvent, Actor, SubmissionState } from '../types/intake-contract';
 import { randomUUID } from 'crypto';
+import { EventId, SubmissionId } from '../types/branded.js';
 
 /**
  * Event emitter interface for validation events
@@ -245,9 +246,9 @@ export class Validator {
     if (result.success) {
       // Emit validation.passed event on successful validation
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'validation.passed',
-        submissionId,
+        submissionId: SubmissionId(submissionId),
         ts: new Date().toISOString(),
         actor,
         state,
@@ -260,9 +261,9 @@ export class Validator {
     } else {
       // Emit validation.failed event on validation errors
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'validation.failed',
-        submissionId,
+        submissionId: SubmissionId(submissionId),
         ts: new Date().toISOString(),
         actor,
         state,
@@ -300,9 +301,9 @@ export class Validator {
     // Emit validation.passed event on successful validation
     if (result.success) {
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'validation.passed',
-        submissionId,
+        submissionId: SubmissionId(submissionId),
         ts: new Date().toISOString(),
         actor,
         state,
@@ -317,9 +318,9 @@ export class Validator {
 
     // Emit validation.failed event on validation errors
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: 'validation.failed',
-      submissionId,
+      submissionId: SubmissionId(submissionId),
       ts: new Date().toISOString(),
       actor,
       state,
@@ -355,9 +356,9 @@ export class Validator {
     // Emit validation.passed event on successful validation
     if (result.success) {
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'validation.passed',
-        submissionId,
+        submissionId: SubmissionId(submissionId),
         ts: new Date().toISOString(),
         actor,
         state,
@@ -370,9 +371,9 @@ export class Validator {
     } else {
       // Emit validation.failed event on validation errors
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'validation.failed',
-        submissionId,
+        submissionId: SubmissionId(submissionId),
         ts: new Date().toISOString(),
         actor,
         state,

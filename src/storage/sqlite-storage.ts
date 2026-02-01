@@ -16,6 +16,7 @@ import type {
   Actor,
 } from "../types/intake-contract.js";
 import type { EventStore, EventFilters, EventStoreStats } from "../core/event-store.js";
+import { EventId, SubmissionId } from "../types/branded.js";
 import type { StorageBackend } from "./storage-backend.js";
 import type {
   FormBridgeStorage,
@@ -266,9 +267,9 @@ class SqliteEventStore implements EventStore {
     }>;
 
     return rows.map((row) => ({
-      eventId: row.eventId,
+      eventId: EventId(row.eventId),
       type: row.type as IntakeEventType,
-      submissionId: row.submissionId,
+      submissionId: SubmissionId(row.submissionId),
       ts: row.ts,
       version: row.version,
       actor: JSON.parse(row.actor) as Actor,

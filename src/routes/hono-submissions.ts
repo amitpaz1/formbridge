@@ -18,6 +18,7 @@ import {
 } from "../core/submission-manager.js";
 import type { Actor } from "../types/intake-contract.js";
 import { parseActorWithFallback as parseActor } from "./shared/actor-validation.js";
+import { SubmissionId } from "../types/branded.js";
 
 /**
  * Creates a Hono router with submission endpoints.
@@ -228,7 +229,7 @@ export function createHonoSubmissionRouter(
 
       try {
         const result = await manager.submit({
-          submissionId,
+          submissionId: SubmissionId(submissionId),
           resumeToken: body.resumeToken,
           actor: body.actor as Actor,
           idempotencyKey: body.idempotencyKey,

@@ -6,10 +6,11 @@
 import { serve } from "@hono/node-server";
 import { createFormBridgeAppWithIntakes } from "./app.js";
 import type { IntakeDefinition } from "./submission-types.js";
+import { IntakeId } from "./types/branded.js";
 
 // Sample vendor onboarding intake
 const vendorOnboarding: IntakeDefinition = {
-  id: "vendor-onboarding",
+  id: IntakeId("vendor-onboarding"),
   version: "1.0.0",
   name: "Vendor Onboarding",
   description: "Onboard new vendors with tax ID, bank account, and documentation",
@@ -44,7 +45,7 @@ const vendorOnboarding: IntakeDefinition = {
 
 // Insurance Claim intake — rich schema with 20+ fields, conditional fields, file uploads, approval gates
 const insuranceClaim: IntakeDefinition = {
-  id: "insurance-claim",
+  id: IntakeId("insurance-claim"),
   version: "1.0.0",
   name: "Auto Insurance Claim",
   description: "File a comprehensive auto insurance claim with incident details, vehicle info, and supporting documents",
@@ -179,7 +180,7 @@ const insuranceClaim: IntakeDefinition = {
 
 // Simple contact form intake
 const contactForm: IntakeDefinition = {
-  id: "contact-form",
+  id: IntakeId("contact-form"),
   version: "1.0.0",
   name: "Contact Form",
   description: "Simple contact form",

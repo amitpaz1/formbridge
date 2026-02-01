@@ -16,6 +16,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HTTPException } from 'hono/http-exception';
 import type { IntakeError, SubmissionState } from '../submission-types.js';
+import type { SubmissionId } from '../types/branded.js';
 import {
   IntakeNotFoundError,
   IntakeDuplicateError,
@@ -40,7 +41,7 @@ export interface ErrorResponse {
  */
 export class SubmissionError extends Error {
   constructor(
-    public submissionId: string,
+    public submissionId: SubmissionId,
     public state: SubmissionState,
     public resumeToken: string,
     public intakeError: NonNullable<IntakeError['error']>
@@ -270,7 +271,7 @@ export function throwNotFoundError(resource: string, id: string): never {
  * @returns SubmissionError instance to be thrown
  */
 export function createSubmissionError(
-  submissionId: string,
+  submissionId: SubmissionId,
   state: SubmissionState,
   resumeToken: string,
   errorDetails: NonNullable<IntakeError['error']>

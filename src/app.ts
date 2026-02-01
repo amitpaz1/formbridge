@@ -37,6 +37,7 @@ import type {
 import type { WebhookNotifier, ReviewerNotification } from './core/approval-manager.js';
 import { redactEventTokens } from './routes/event-sanitizer.js';
 import { parseActor } from './routes/shared/actor-validation.js';
+import { SubmissionId, IntakeId, ResumeToken } from "./types/branded.js";
 
 /** Reserved field names that cannot be set via API */
 const RESERVED_FIELD_NAMES = new Set(['__proto__', 'constructor', 'prototype', '__uploads']);
@@ -246,10 +247,10 @@ class WebhookNotifierImpl implements WebhookNotifier {
 
     // Build a synthetic Submission-like object for the webhook manager
     const syntheticSubmission: Submission = {
-      id: notification.submissionId,
-      intakeId: notification.intakeId,
+      id: SubmissionId(notification.submissionId),
+      intakeId: IntakeId(notification.intakeId),
       state: notification.state,
-      resumeToken: '',
+      resumeToken: ResumeToken(''),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       fields: notification.fields,
@@ -565,7 +566,7 @@ export function createFormBridgeAppWithIntakes(
 
     // Create submission
     const result = await manager.createSubmission({
-      intakeId,
+      intakeId: IntakeId(intakeId),
       actor,
       idempotencyKey: body.idempotencyKey,
     });
@@ -574,7 +575,7 @@ export function createFormBridgeAppWithIntakes(
     if (initFields && Object.keys(initFields).length > 0) {
       const setResult = await manager.setFields({
         submissionId: result.submissionId,
-        resumeToken: result.resumeToken,
+        resumeToken: ResumeToken(result.resumeToken),
         actor,
         fields: initFields,
       });
@@ -750,8 +751,8 @@ export function createFormBridgeAppWithIntakes(
 
     try {
       const result = await manager.setFields({
-        submissionId,
-        resumeToken: body.resumeToken,
+        submissionId: SubmissionId(submissionId),
+        resumeToken: ResumeToken(body.resumeToken),
         actor: actorResult.actor,
         fields: body.fields,
       });

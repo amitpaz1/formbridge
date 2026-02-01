@@ -16,6 +16,7 @@ import type { Actor, IntakeDefinition } from "../types/intake-contract.js";
 import type { MCPToolDefinition } from "../types/mcp-tool-definitions.js";
 import type { JsonSchema } from "../schemas/json-schema-converter.js";
 import { convertZodToJsonSchema } from "../schemas/json-schema-converter.js";
+import { IntakeId } from "../types/branded.js";
 
 // =============================================================================
 // § MCP SDK Tool Registration
@@ -140,7 +141,7 @@ export function registerTools(
 
         // Construct a minimal IntakeDefinition for validation
         const intakeDefinition: IntakeDefinition = {
-          id: intakeId,
+          id: IntakeId(intakeId),
           version: "1.0.0",
           name: intakeId,
           schema: {},

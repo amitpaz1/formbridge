@@ -12,6 +12,7 @@ import type {
 import type { Submission } from "../submission-types";
 import { assertValidTransition } from "./state-machine.js";
 import { randomUUID } from "crypto";
+import { EventId } from "../types/branded.js";
 import {
   SubmissionNotFoundError,
   InvalidResumeTokenError,
@@ -180,7 +181,7 @@ export class ApprovalManager {
 
     // Emit review.approved event
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "review.approved",
       submissionId: submission.id,
       ts: now,
@@ -262,7 +263,7 @@ export class ApprovalManager {
 
     // Emit review.rejected event
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "review.rejected",
       submissionId: submission.id,
       ts: now,
@@ -345,7 +346,7 @@ export class ApprovalManager {
 
     // Emit field.updated event (custom event type for changes requested)
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "field.updated",
       submissionId: submission.id,
       ts: now,

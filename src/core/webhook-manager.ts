@@ -10,6 +10,7 @@
  */
 
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { DeliveryId, EventId, SubmissionId, IntakeId, ResumeToken } from "../types/branded.js";
 import type {
   IntakeEvent,
   DeliveryRecord,
@@ -176,7 +177,7 @@ export class WebhookManager {
     submission: Submission,
     destination: Destination
   ): Promise<string> {
-    const deliveryId = `dlv_${randomUUID()}`;
+    const deliveryId = DeliveryId(`dlv_${randomUUID()}`);
     const now = new Date().toISOString();
 
     const record: DeliveryRecord = {
@@ -389,7 +390,9 @@ export class WebhookManager {
       // Reconstruct submission and destination from stored context
       const submission = {
         ...ctx.submission,
-        resumeToken: '',
+        id: SubmissionId(ctx.submission.id),
+        intakeId: IntakeId(ctx.submission.intakeId),
+        resumeToken: ResumeToken(''),
         updatedBy: ctx.submission.createdBy as Actor,
         events: [],
       } as Submission;
@@ -424,7 +427,7 @@ export class WebhookManager {
     };
 
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type,
       submissionId: submission.id,
       ts: new Date().toISOString(),

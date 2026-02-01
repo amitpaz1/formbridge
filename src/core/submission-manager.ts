@@ -20,6 +20,7 @@ import type { EventStore } from "./event-store.js";
 import { InMemoryEventStore } from "./event-store.js";
 import { assertValidTransition } from "./state-machine.js";
 import { randomUUID } from "crypto";
+import { SubmissionId, ResumeToken, EventId } from "../types/branded.js";
 
 import {
   SubmissionNotFoundError,
@@ -162,8 +163,8 @@ export class SubmissionManager {
       }
     }
 
-    const submissionId = `sub_${randomUUID()}`;
-    const resumeToken = `rtok_${randomUUID()}`;
+    const submissionId = SubmissionId(`sub_${randomUUID()}`);
+    const resumeToken = ResumeToken(`rtok_${randomUUID()}`);
     const now = new Date().toISOString();
 
     const fieldAttribution: FieldAttribution = {};
@@ -201,7 +202,7 @@ export class SubmissionManager {
 
     // Emit submission.created event (recordEvent will save the submission)
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "submission.created",
       submissionId,
       ts: now,
@@ -320,7 +321,7 @@ export class SubmissionManager {
     submission.updatedBy = request.actor;
 
     // Rotate resume token on every state-changing operation
-    submission.resumeToken = `rtok_${randomUUID()}`;
+    submission.resumeToken = ResumeToken(`rtok_${randomUUID()}`);
 
     // Update state if still in draft
     if (submission.state === "draft") {
@@ -337,7 +338,7 @@ export class SubmissionManager {
 
     // Emit a single batch fields.updated event for all field changes
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "fields.updated",
       submissionId: submission.id,
       ts: now,
@@ -441,12 +442,12 @@ export class SubmissionManager {
     }
 
     // Generate new resume token
-    const newResumeToken = `rtok_${randomUUID()}`;
+    const newResumeToken = ResumeToken(`rtok_${randomUUID()}`);
     submission.resumeToken = newResumeToken;
 
     // Emit upload requested event (recordEvent will save the submission)
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "upload.requested",
       submissionId: submission.id,
       ts: now,
@@ -549,12 +550,12 @@ export class SubmissionManager {
       }
 
       // Rotate resume token only after successful verification
-      const newResumeToken = `rtok_${randomUUID()}`;
+      const newResumeToken = ResumeToken(`rtok_${randomUUID()}`);
       submission.resumeToken = newResumeToken;
 
       // Emit upload completed event (recordEvent will save the submission)
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: "upload.completed",
         submissionId: submission.id,
         ts: now,
@@ -581,7 +582,7 @@ export class SubmissionManager {
       // Emit upload failed event (do NOT rotate resume token on failure)
       // recordEvent will save the submission
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: "upload.failed",
         submissionId: submission.id,
         ts: now,
@@ -661,7 +662,7 @@ export class SubmissionManager {
 
       // Emit review.requested event (recordEvent will save the submission)
       const reviewEvent: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: "review.requested",
         submissionId: submission.id,
         ts: now,
@@ -704,7 +705,7 @@ export class SubmissionManager {
 
     // Emit submission.submitted event (recordEvent will save the submission)
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "submission.submitted",
       submissionId: submission.id,
       ts: now,
@@ -801,7 +802,7 @@ export class SubmissionManager {
 
     // Emit handoff.link_issued event
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "handoff.link_issued",
       submissionId: submission.id,
       ts: now,
@@ -841,7 +842,7 @@ export class SubmissionManager {
 
     // Create handoff.resumed event
     const event: IntakeEvent = {
-      eventId: `evt_${randomUUID()}`,
+      eventId: EventId(`evt_${randomUUID()}`),
       type: "handoff.resumed",
       submissionId: submission.id,
       ts: now,
@@ -892,7 +893,7 @@ export class SubmissionManager {
       submission.updatedBy = systemActor;
 
       const event: IntakeEvent = {
-        eventId: `evt_${randomUUID()}`,
+        eventId: EventId(`evt_${randomUUID()}`),
         type: 'submission.expired',
         submissionId: submission.id,
         ts: now,
