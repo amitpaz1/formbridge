@@ -6,7 +6,12 @@ Mixed-mode agent-human form submission infrastructure. AI agents fill what they 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-green.svg)](https://nodejs.org/)
-[![Tests](https://img.shields.io/badge/tests-912%20passing-brightgreen.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-1339%20passing-brightgreen.svg)](#testing)
+[![@formbridge/create](https://img.shields.io/npm/v/@formbridge/create?label=%40formbridge%2Fcreate)](https://www.npmjs.com/package/@formbridge/create)
+[![@formbridge/form-renderer](https://img.shields.io/npm/v/@formbridge/form-renderer?label=%40formbridge%2Fform-renderer)](https://www.npmjs.com/package/@formbridge/form-renderer)
+[![@formbridge/schema-normalizer](https://img.shields.io/npm/v/@formbridge/schema-normalizer?label=%40formbridge%2Fschema-normalizer)](https://www.npmjs.com/package/@formbridge/schema-normalizer)
+[![@formbridge/shared](https://img.shields.io/npm/v/@formbridge/shared?label=%40formbridge%2Fshared)](https://www.npmjs.com/package/@formbridge/shared)
+[![@formbridge/templates](https://img.shields.io/npm/v/@formbridge/templates?label=%40formbridge%2Ftemplates)](https://www.npmjs.com/package/@formbridge/templates)
 
 ## The Problem
 
@@ -40,14 +45,15 @@ Agent                          FormBridge                        Human
 
 ## Packages
 
-| Package | Description |
-|---------|-------------|
-| `@formbridge/mcp-server` | Core server — HTTP API, MCP tools, submission lifecycle, storage backends |
-| `@formbridge/form-renderer` | React components and hooks for rendering forms and resuming agent-started submissions |
-| `@formbridge/create` | CLI scaffolding tool (`npx @formbridge/create`) |
-| `@formbridge/schema-normalizer` | Converts Zod, JSON Schema, and OpenAPI specs into a unified IntakeSchema IR |
-| `@formbridge/templates` | Ready-made intake templates (vendor onboarding, IT access, customer intake, expense report, bug report) |
-| `@formbridge/admin-dashboard` | React SPA for managing intakes, reviewing submissions, and configuring approvals |
+| Package | npm | Description |
+|---------|-----|-------------|
+| `@formbridge/mcp-server` | — | Core server — HTTP API, MCP tools, submission lifecycle, storage backends (main package) |
+| `@formbridge/create` | [![npm](https://img.shields.io/npm/v/@formbridge/create)](https://www.npmjs.com/package/@formbridge/create) | CLI scaffolding tool (`npx @formbridge/create`) |
+| `@formbridge/form-renderer` | [![npm](https://img.shields.io/npm/v/@formbridge/form-renderer)](https://www.npmjs.com/package/@formbridge/form-renderer) | React components and hooks for rendering forms and resuming agent-started submissions |
+| `@formbridge/schema-normalizer` | [![npm](https://img.shields.io/npm/v/@formbridge/schema-normalizer)](https://www.npmjs.com/package/@formbridge/schema-normalizer) | Converts Zod, JSON Schema, and OpenAPI specs into a unified IntakeSchema IR |
+| `@formbridge/shared` | [![npm](https://img.shields.io/npm/v/@formbridge/shared)](https://www.npmjs.com/package/@formbridge/shared) | Shared utilities across packages |
+| `@formbridge/templates` | [![npm](https://img.shields.io/npm/v/@formbridge/templates)](https://www.npmjs.com/package/@formbridge/templates) | Ready-made intake templates (vendor onboarding, IT access, customer intake, expense report, bug report) |
+| `@formbridge/admin-dashboard` | — | React SPA for managing intakes, reviewing submissions, and configuring approvals |
 
 ## Quick Start
 
@@ -332,7 +338,7 @@ packages/
   demo/               # Demo app with sample intakes and pre-configured workflows
 
 docs/               # VitePress documentation site
-tests/              # 912 tests across 36 files
+tests/              # 1,339 tests across 50 files
 .github/workflows/  # CI (lint + typecheck + tests on Node 18/20/22) + release
 ```
 
@@ -342,7 +348,7 @@ tests/              # 912 tests across 36 files
 # Install dependencies
 npm install
 
-# Run all 912 tests
+# Run all 1,339 tests
 npm run test:run
 
 # Watch mode
@@ -375,13 +381,12 @@ The test suite covers:
 - **Webhook delivery** — HMAC signing, retry logic, delivery tracking
 
 ```
-912 tests passing across 36 test files
-74% code coverage (core modules 90%+)
+1,339 tests passing across 50 test files, 85.9% code coverage
 ```
 
 ## Roadmap
 
-- [ ] npm package publishing
+- [x] npm package publishing (5 packages live on npm)
 - [ ] PostgreSQL storage backend
 - [ ] Real-time collaboration (WebSocket field locking)
 - [ ] Email notifications for pending approvals
