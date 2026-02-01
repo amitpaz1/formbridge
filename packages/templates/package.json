@@ -1,7 +1,9 @@
 {
   "name": "@formbridge/templates",
-  "version": "0.1.0",
-  "publishConfig": { "access": "public" },
+  "version": "0.2.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Example intake templates for FormBridge",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,7 +14,9 @@
       "types": "./dist/index.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"
