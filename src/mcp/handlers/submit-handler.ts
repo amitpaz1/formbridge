@@ -2,6 +2,7 @@
  * MCP Submit Handler — finalizes and submits a submission.
  */
 
+import { z } from 'zod';
 import type { IntakeDefinition } from '../../schemas/intake-schema.js';
 import type { SubmissionResponse } from '../../types/intake-contract.js';
 import { SubmissionState } from '../../types/intake-contract.js';
@@ -11,12 +12,16 @@ import type { SubmissionStore } from '../submission-store.js';
 import { lookupEntry, isError } from '../response-builder.js';
 import { SubmissionId } from '../../types/branded.js';
 
+const SubmitArgsSchema = z.object({
+  resumeToken: z.string(),
+});
+
 export async function handleSubmit(
   intake: IntakeDefinition,
   args: Record<string, unknown>,
   store: SubmissionStore
 ): Promise<SubmissionResponse> {
-  const { resumeToken } = args as { resumeToken: string };
+  const { resumeToken } = SubmitArgsSchema.parse(args);
 
   const result = lookupEntry(store, resumeToken, intake);
   if (isError(result)) return result;

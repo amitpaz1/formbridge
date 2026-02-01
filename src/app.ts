@@ -42,6 +42,23 @@ import { SubmissionId, IntakeId, ResumeToken } from "./types/branded.js";
 /** Reserved field names that cannot be set via API */
 const RESERVED_FIELD_NAMES = new Set(['__proto__', 'constructor', 'prototype', '__uploads']);
 
+function extractSchemaRequired(schema: unknown): { required?: string[] } {
+  if (schema && typeof schema === 'object' && 'required' in schema) {
+    const s = schema as { required?: unknown };
+    if (Array.isArray(s.required)) {
+      return { required: s.required as string[] };
+    }
+  }
+  return {};
+}
+
+function extractSchemaProperties(schema: unknown): import('./submission-types.js').JSONSchema | undefined {
+  if (schema && typeof schema === 'object' && 'properties' in schema) {
+    return schema as import('./submission-types.js').JSONSchema;
+  }
+  return undefined;
+}
+
 /** Check for reserved field names in fields object */
 function hasReservedFieldNames(fields: Record<string, unknown>): string | null {
   for (const key of Object.keys(fields)) {
@@ -501,7 +518,7 @@ export function createFormBridgeAppWithIntakes(
       const existing = await store.getByIdempotencyKey(body.idempotencyKey);
       if (existing) {
         const intake = registry.getIntake(intakeId);
-        const schema = intake.schema as { required?: string[] };
+        const schema = extractSchemaRequired(intake.schema);
         const requiredFields = schema.required ?? [];
         const providedFields = Object.keys(existing.fields);
         const missingFields = requiredFields.filter((f: string) => !providedFields.includes(f));
@@ -536,8 +553,8 @@ export function createFormBridgeAppWithIntakes(
 
       // Validate initial fields against intake schema
       const intake = registry.getIntake(intakeId);
-      const intakeSchema = intake.schema as import('./submission-types.js').JSONSchema;
-      if (intakeSchema.properties) {
+      const intakeSchema = extractSchemaProperties(intake.schema);
+      if (intakeSchema?.properties) {
         const partialSchema: import('./submission-types.js').JSONSchema = {
           type: 'object',
           properties: {},
@@ -582,7 +599,7 @@ export function createFormBridgeAppWithIntakes(
 
       if (setResult.ok) {
         const intake = registry.getIntake(intakeId);
-        const schema = intake.schema as { required?: string[] };
+        const schema = extractSchemaRequired(intake.schema);
         const requiredFields = schema.required ?? [];
         const providedFields = Object.keys(initFields as Record<string, unknown>);
         const missingFields = requiredFields.filter((f: string) => !providedFields.includes(f));
@@ -602,7 +619,7 @@ export function createFormBridgeAppWithIntakes(
     }
 
     // For submissions with no initial fields, omit missingFields
-    const { missingFields: _missingFields, ...rest } = result as unknown as Record<string, unknown>;
+    const { missingFields: _missingFields, ...rest } = result;
     return c.json(rest, 201);
   });
 
@@ -722,8 +739,8 @@ export function createFormBridgeAppWithIntakes(
 
     // Validate fields against intake schema (partial validation — only validate provided fields)
     const intake = registry.getIntake(intakeId);
-    const intakeSchema = intake.schema as import('./submission-types.js').JSONSchema;
-    if (intakeSchema.properties) {
+    const intakeSchema = extractSchemaProperties(intake.schema);
+    if (intakeSchema?.properties) {
       const partialSchema: import('./submission-types.js').JSONSchema = {
         type: 'object',
         properties: {},

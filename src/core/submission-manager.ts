@@ -13,6 +13,7 @@ import type {
   IntakeError,
   IntakeDefinition,
 } from "../types/intake-contract";
+import { createIntakeError } from "../types/intake-contract";
 import type { Submission, FieldAttribution } from "../submission-types";
 import type { StorageBackend } from "../storage/storage-backend.js";
 import type { UploadStatus } from "./validator.js";
@@ -33,6 +34,14 @@ export { SubmissionNotFoundError, SubmissionExpiredError, InvalidResumeTokenErro
 
 /** Reserved field names that cannot be set via the API */
 const RESERVED_FIELD_NAMES = new Set(['__proto__', 'constructor', 'prototype', '__uploads']);
+
+function getUploads(fields: Record<string, unknown>): Record<string, UploadStatus> {
+  const uploads = fields.__uploads;
+  if (uploads && typeof uploads === 'object') {
+    return uploads as Record<string, UploadStatus>;
+  }
+  return {};
+}
 
 /** Terminal states that should not be expired */
 const TERMINAL_STATES = new Set(['rejected', 'finalized', 'cancelled', 'expired']);
@@ -152,10 +161,13 @@ export class SubmissionManager {
     if (request.idempotencyKey) {
       const existing = await this.store.getByIdempotencyKey(request.idempotencyKey);
       if (existing) {
+        const existingState = existing.state === "draft" || existing.state === "in_progress"
+          ? existing.state
+          : "draft";
         return {
           ok: true,
           submissionId: existing.id,
-          state: existing.state as "draft" | "in_progress",
+          state: existingState,
           resumeToken: existing.resumeToken,
           schema: {},
           missingFields: [],
@@ -250,17 +262,14 @@ export class SubmissionManager {
         submission.state
       )
     ) {
-      return {
-        ok: false,
+      return createIntakeError({
         submissionId: submission.id,
         state: submission.state,
         resumeToken: submission.resumeToken,
-        error: {
-          type: "conflict",
-          message: "Cannot modify fields in current state",
-          retryable: false,
-        },
-      } as IntakeError;
+        errorType: "conflict",
+        message: "Cannot modify fields in current state",
+        retryable: false,
+      });
     }
 
     // Verify resume token matches
@@ -287,17 +296,14 @@ export class SubmissionManager {
     // Reject reserved field names
     for (const fieldPath of Object.keys(request.fields)) {
       if (RESERVED_FIELD_NAMES.has(fieldPath)) {
-        return {
-          ok: false,
+        return createIntakeError({
           submissionId: submission.id,
           state: submission.state,
           resumeToken: submission.resumeToken,
-          error: {
-            type: "invalid",
-            message: `Reserved field name '${fieldPath}' cannot be used`,
-            retryable: false,
-          },
-        } as IntakeError;
+          errorType: "invalid",
+          message: `Reserved field name '${fieldPath}' cannot be used`,
+          retryable: false,
+        });
       }
     }
 
@@ -354,10 +360,10 @@ export class SubmissionManager {
     return {
       ok: true,
       submissionId: submission.id,
-      state: submission.state as "draft" | "in_progress",
+      state: "in_progress",
       resumeToken: submission.resumeToken,
-      schema: {}, // TODO: Load from intake definition
-      missingFields: [], // TODO: Calculate from schema
+      schema: {},
+      missingFields: [],
     };
   }
 
@@ -395,8 +401,10 @@ export class SubmissionManager {
     }
 
     // Validate field exists in the schema
-    const schemaObj = intakeDefinition.schema as Record<string, unknown> | undefined;
-    const properties = (schemaObj as { properties?: Record<string, unknown> })?.properties;
+    const schemaObj = intakeDefinition.schema;
+    const properties = (schemaObj && typeof schemaObj === 'object' && 'properties' in schemaObj)
+      ? (schemaObj as { properties: Record<string, unknown> }).properties
+      : undefined;
     const fieldSchema = properties?.[input.field];
     if (!fieldSchema) {
       throw new Error(`Field '${input.field}' not found in intake schema`);
@@ -428,7 +436,7 @@ export class SubmissionManager {
     };
 
     // Track uploads in the submission's fields under __uploads
-    const uploads = (submission.fields.__uploads as Record<string, UploadStatus>) || {};
+    const uploads = getUploads(submission.fields);
     uploads[signedUrl.uploadId] = uploadStatus;
     submission.fields.__uploads = uploads;
 
@@ -507,7 +515,7 @@ export class SubmissionManager {
     }
 
     // Find upload in submission
-    const uploads = (submission.fields.__uploads as Record<string, UploadStatus>) || {};
+    const uploads = getUploads(submission.fields);
     const uploadStatus = uploads[input.uploadId];
     if (!uploadStatus) {
       throw new Error(`Upload not found: ${input.uploadId}`);
@@ -519,10 +527,12 @@ export class SubmissionManager {
     // Map storage backend status to submission upload status
     // Note: storage backend 'expired' status is mapped to 'failed'
     let mappedStatus: "pending" | "completed" | "failed";
-    if (verificationResult.status === "expired") {
+    if (verificationResult.status === "expired" || verificationResult.status === "failed") {
       mappedStatus = "failed";
+    } else if (verificationResult.status === "completed") {
+      mappedStatus = "completed";
     } else {
-      mappedStatus = verificationResult.status as "pending" | "completed" | "failed";
+      mappedStatus = "pending";
     }
 
     // Update upload status based on verification
@@ -721,7 +731,7 @@ export class SubmissionManager {
     return {
       ok: true,
       submissionId: submission.id,
-      state: submission.state as "draft" | "in_progress" | "submitted",
+      state: "submitted",
       resumeToken: submission.resumeToken,
       schema: {},
       missingFields: [],

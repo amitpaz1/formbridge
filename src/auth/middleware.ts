@@ -17,6 +17,11 @@ import { OAuthProvider } from "./oauth-provider.js";
 import { type Role, hasPermission, type Permission } from "./rbac.js";
 import { RateLimiter } from "./rate-limiter.js";
 
+const VALID_ROLES = new Set<string>(["admin", "reviewer", "viewer"]);
+function isValidRole(value: unknown): value is Role {
+  return typeof value === "string" && VALID_ROLES.has(value);
+}
+
 // =============================================================================
 // § Types
 // =============================================================================
@@ -213,7 +218,7 @@ async function authenticateOAuth(
     authMethod: "oauth",
     userId: result.claims.sub,
     tenantId: result.claims.tenantId,
-    role: (result.claims.role as Role) ?? config.defaultRole ?? "viewer",
+    role: isValidRole(result.claims.role) ? result.claims.role : (config.defaultRole ?? "viewer"),
   };
 }
 
@@ -228,5 +233,9 @@ function setAuthContext(c: Context, auth: AuthContext): void {
 }
 
 export function getAuthContext(c: Context): AuthContext | undefined {
-  return c.get(AUTH_CONTEXT_KEY) as AuthContext | undefined;
+  const value = c.get(AUTH_CONTEXT_KEY);
+  if (value && typeof value === 'object' && 'authenticated' in value) {
+    return value as AuthContext;
+  }
+  return undefined;
 }

@@ -18,7 +18,7 @@ import type {
   Destination,
   Actor,
 } from "../types/intake-contract.js";
-import type { Submission } from "../submission-types.js";
+import type { Submission, FieldAttribution } from "../submission-types.js";
 import {
   type DeliveryQueue,
   InMemoryDeliveryQueue,
@@ -138,7 +138,7 @@ export class WebhookManager {
   buildHeaders(body: string, destination: Destination): Record<string, string> {
     const timestamp = new Date().toISOString();
     // Sanitize destination headers to prevent header injection
-    const sanitizedHeaders = sanitizeDestinationHeaders(destination.headers as Record<string, string> | undefined);
+    const sanitizedHeaders = sanitizeDestinationHeaders(destination.headers);
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       "X-FormBridge-Timestamp": timestamp,
@@ -204,7 +204,7 @@ export class WebhookManager {
       destination: {
         kind: destination.kind,
         url: destination.url,
-        headers: destination.headers as Record<string, string> | undefined,
+        headers: destination.headers,
       },
     };
 
@@ -388,17 +388,28 @@ export class WebhookManager {
       if (!ctx) continue;
 
       // Reconstruct submission and destination from stored context
-      const submission = {
-        ...ctx.submission,
+      const createdBy = ctx.submission.createdBy as Actor;
+      const validKinds = new Set<Destination['kind']>(['webhook', 'callback', 'queue']);
+      const kind: Destination['kind'] = validKinds.has(ctx.destination.kind as Destination['kind'])
+        ? (ctx.destination.kind as Destination['kind'])
+        : 'webhook';
+
+      const submission: Submission = {
         id: SubmissionId(ctx.submission.id),
         intakeId: IntakeId(ctx.submission.intakeId),
+        state: ctx.submission.state as import("../types/intake-contract").SubmissionState,
+        fields: ctx.submission.fields,
+        fieldAttribution: ctx.submission.fieldAttribution as FieldAttribution,
+        createdAt: ctx.submission.createdAt,
+        updatedAt: ctx.submission.updatedAt,
         resumeToken: ResumeToken(''),
-        updatedBy: ctx.submission.createdBy as Actor,
+        createdBy,
+        updatedBy: createdBy,
         events: [],
-      } as Submission;
+      };
 
       const destination: Destination = {
-        kind: ctx.destination.kind as Destination['kind'],
+        kind,
         url: ctx.destination.url,
         headers: ctx.destination.headers,
       };

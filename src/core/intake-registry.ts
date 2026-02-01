@@ -160,7 +160,10 @@ export class IntakeRegistry {
    */
   getSchema(intakeId: string): JSONSchema {
     const intake = this.getIntake(intakeId);
-    return intake.schema as JSONSchema;
+    if (intake.schema && typeof intake.schema === 'object') {
+      return intake.schema as JSONSchema;
+    }
+    return { type: 'object' };
   }
 
   /**
@@ -284,7 +287,7 @@ export class IntakeRegistry {
     }
 
     // Validate retry policy if present
-    if (destination.retryPolicy) {
+    if (destination.retryPolicy && typeof destination.retryPolicy === 'object') {
       const policy = destination.retryPolicy as Record<string, unknown>;
       if (typeof policy.maxAttempts !== 'number' || policy.maxAttempts < 0) {
         throw new IntakeValidationError(
@@ -355,7 +358,11 @@ export class IntakeRegistry {
         throw new IntakeValidationError(intakeId, 'uiHints.steps must be an array');
       }
 
-      for (const step of uiHints.steps as Record<string, unknown>[]) {
+      for (const rawStep of uiHints.steps) {
+        if (!rawStep || typeof rawStep !== 'object') {
+          throw new IntakeValidationError(intakeId, 'each step must be an object');
+        }
+        const step = rawStep as Record<string, unknown>;
         if (!step.id || typeof step.id !== 'string') {
           throw new IntakeValidationError(intakeId, 'each step must have an id string');
         }

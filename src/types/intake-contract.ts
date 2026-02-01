@@ -385,6 +385,37 @@ export interface SubmissionSuccess {
 export type SubmissionResponse = SubmissionSuccess | IntakeError | ValidationErrorResponse;
 
 /**
+ * Factory function for creating IntakeError objects with proper typing.
+ * Eliminates the need for `as IntakeError` assertions.
+ */
+export function createIntakeError(params: {
+  submissionId?: SubmissionId;
+  state?: SubmissionState;
+  resumeToken?: string;
+  errorType: IntakeErrorType;
+  message: string;
+  retryable: boolean;
+  retryAfterMs?: number;
+  fields?: FieldError[];
+  nextActions?: NextAction[];
+}): IntakeError {
+  return {
+    ok: false,
+    submissionId: params.submissionId,
+    state: params.state,
+    resumeToken: params.resumeToken,
+    error: {
+      type: params.errorType,
+      message: params.message,
+      retryable: params.retryable,
+      retryAfterMs: params.retryAfterMs,
+      fields: params.fields,
+      nextActions: params.nextActions,
+    },
+  };
+}
+
+/**
  * Type guard to check if a response is an IntakeError
  * Supports both the structured error envelope shape (ok: false)
  * and the flat error shape (type, fields, nextActions)
