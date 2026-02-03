@@ -164,22 +164,58 @@ describe("API Key Auth", () => {
 // § OAuth Provider Tests
 // =============================================================================
 
-describe("OAuth Provider", () => {
-  function createJwt(payload: Record<string, unknown>): string {
-    const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
-    const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-    return `${header}.${body}.fake-signature`;
-  }
+import * as jose from "jose";
+import { vi } from "vitest";
 
-  const provider = new OAuthProvider({
-    issuer: "https://auth.example.com",
-    audience: "formbridge-api",
-    tenantClaim: "org_id",
-    roleClaim: "role",
+describe("OAuth Provider", () => {
+  // Test key pair for signing JWTs
+  let privateKey: jose.KeyLike;
+  let publicKey: jose.KeyLike;
+
+  beforeEach(async () => {
+    // Generate a fresh key pair for each test
+    const keyPair = await jose.generateKeyPair("RS256");
+    privateKey = keyPair.privateKey;
+    publicKey = keyPair.publicKey;
   });
 
-  it("should validate a valid JWT", async () => {
-    const token = createJwt({
+  // Create a properly signed JWT
+  async function createSignedJwt(
+    payload: Record<string, unknown>,
+    key: jose.KeyLike = privateKey
+  ): Promise<string> {
+    return new jose.SignJWT(payload as jose.JWTPayload)
+      .setProtectedHeader({ alg: "RS256" })
+      .setIssuedAt()
+      .sign(key);
+  }
+
+  // Create a provider with mocked JWKS
+  function createTestProvider() {
+    const provider = new OAuthProvider({
+      issuer: "https://auth.example.com",
+      audience: "formbridge-api",
+      tenantClaim: "org_id",
+      roleClaim: "role",
+    });
+
+    // Mock the JWKS to return our test public key
+    // @ts-expect-error - accessing private method for testing
+    provider.getJwks = async () => {
+      return async (protectedHeader: jose.JWTHeaderParameters) => {
+        if (protectedHeader.alg !== "RS256") {
+          throw new jose.errors.JOSEAlgNotAllowed("Algorithm not allowed");
+        }
+        return publicKey;
+      };
+    };
+
+    return provider;
+  }
+
+  it("should validate a valid JWT with proper signature", async () => {
+    const provider = createTestProvider();
+    const token = await createSignedJwt({
       sub: "user-1",
       iss: "https://auth.example.com",
       aud: "formbridge-api",
@@ -197,7 +233,8 @@ describe("OAuth Provider", () => {
   });
 
   it("should reject expired tokens", async () => {
-    const token = createJwt({
+    const provider = createTestProvider();
+    const token = await createSignedJwt({
       sub: "user-1",
       iss: "https://auth.example.com",
       aud: "formbridge-api",
@@ -211,7 +248,8 @@ describe("OAuth Provider", () => {
   });
 
   it("should reject wrong issuer", async () => {
-    const token = createJwt({
+    const provider = createTestProvider();
+    const token = await createSignedJwt({
       sub: "user-1",
       iss: "https://other.example.com",
       aud: "formbridge-api",
@@ -220,11 +258,12 @@ describe("OAuth Provider", () => {
 
     const result = await provider.validateToken(token);
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("issuer");
+    expect(result.error?.toLowerCase()).toMatch(/issuer|claim/);
   });
 
   it("should reject wrong audience", async () => {
-    const token = createJwt({
+    const provider = createTestProvider();
+    const token = await createSignedJwt({
       sub: "user-1",
       iss: "https://auth.example.com",
       aud: "wrong-audience",
@@ -233,17 +272,38 @@ describe("OAuth Provider", () => {
 
     const result = await provider.validateToken(token);
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("audience");
+    expect(result.error?.toLowerCase()).toMatch(/audience|claim/);
   });
 
   it("should reject invalid JWT structure", async () => {
+    const provider = createTestProvider();
     const result = await provider.validateToken("not-a-jwt");
     expect(result.valid).toBe(false);
     expect(result.error).toContain("structure");
   });
 
+  it("should reject tokens with invalid signature", async () => {
+    const provider = createTestProvider();
+    // Create a token signed with a different key
+    const otherKeyPair = await jose.generateKeyPair("RS256");
+    const token = await createSignedJwt(
+      {
+        sub: "user-1",
+        iss: "https://auth.example.com",
+        aud: "formbridge-api",
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      otherKeyPair.privateKey
+    );
+
+    const result = await provider.validateToken(token);
+    expect(result.valid).toBe(false);
+    expect(result.error?.toLowerCase()).toMatch(/signature|key/);
+  });
+
   it("should reject tokens missing sub claim", async () => {
-    const token = createJwt({
+    const provider = createTestProvider();
+    const token = await createSignedJwt({
       iss: "https://auth.example.com",
       aud: "formbridge-api",
       exp: Math.floor(Date.now() / 1000) + 3600,
@@ -251,12 +311,26 @@ describe("OAuth Provider", () => {
 
     const result = await provider.validateToken(token);
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("sub");
+    expect(result.error?.toLowerCase()).toMatch(/sub|claim/);
   });
 
   it("should expose issuer and audience", () => {
+    const provider = new OAuthProvider({
+      issuer: "https://auth.example.com",
+      audience: "formbridge-api",
+    });
     expect(provider.issuer).toBe("https://auth.example.com");
     expect(provider.audience).toBe("formbridge-api");
+  });
+
+  it("should reject 'none' algorithm in config", () => {
+    expect(() => {
+      new OAuthProvider({
+        issuer: "https://auth.example.com",
+        audience: "formbridge-api",
+        allowedAlgorithms: ["none", "RS256"],
+      });
+    }).toThrow("none");
   });
 });
 

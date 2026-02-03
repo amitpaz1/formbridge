@@ -15,9 +15,13 @@ FormBridge implements security best practices throughout its codebase. This docu
 - **Permissions:** Granular permission matrix (intake:read, submission:write, approval:approve, etc.)
 - **Enforcement:** Permission checks on every protected route via middleware
 
-### OAuth Support
-- JWT token validation with configurable provider
-- Tenant isolation via claims
+### OAuth / JWT Support
+- **Signature Verification:** Full cryptographic verification via JWKS (JSON Web Key Sets)
+- **Algorithm Restrictions:** Only asymmetric algorithms allowed by default (RS256, ES256, PS256, etc.)
+- **Security:** 'none' algorithm explicitly rejected; HS256 requires explicit opt-in
+- **Claims Validation:** Issuer, audience, and expiration strictly enforced
+- **Key Rotation:** Automatic JWKS refresh with caching for performance
+- Tenant isolation via configurable claims
 
 ## Input Validation & Sanitization
 
@@ -104,6 +108,17 @@ Applied via Hono's `secureHeaders()` middleware:
 - Dedicated security tests in `tests/security/`
 - URL validation tests covering SSRF bypass techniques
 - Header sanitization tests
+
+## Deployment Considerations
+
+### Multi-Instance Deployments
+- **Idempotency Keys:** Uses database unique constraints. For high-concurrency multi-instance deployments, consider distributed locking if exact-once semantics are critical.
+- **Rate Limiting:** In-memory rate limiter is per-instance. For multi-instance deployments, use Redis-backed rate limiting.
+
+### File Upload Security
+- Files are uploaded directly to S3 via presigned URLs — the server never handles raw bytes
+- MIME type validation relies on client-provided type + S3 constraints
+- For applications that process uploaded files server-side (not FormBridge's default pattern), implement magic byte validation
 
 ## Reporting Vulnerabilities
 
