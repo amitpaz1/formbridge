@@ -84,7 +84,7 @@ export function createHonoApprovalRouter(
       if (error instanceof InvalidResumeTokenError) {
         return c.json(
           { ok: false, error: { type: "invalid_resume_token", message: error.message } },
-          403
+          409
         );
       }
       throw error;
@@ -157,7 +157,7 @@ export function createHonoApprovalRouter(
       if (error instanceof InvalidResumeTokenError) {
         return c.json(
           { ok: false, error: { type: "invalid_resume_token", message: error.message } },
-          403
+          409
         );
       }
       throw error;
@@ -236,7 +236,7 @@ export function createHonoApprovalRouter(
       if (error instanceof InvalidResumeTokenError) {
         return c.json(
           { ok: false, error: { type: "invalid_resume_token", message: error.message } },
-          403
+          409
         );
       }
       throw error;

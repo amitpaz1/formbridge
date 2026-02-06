@@ -128,7 +128,7 @@ describe("Hono Approval Routes", () => {
       });
     });
 
-    it("returns 403 when resume token is invalid", async () => {
+    it("returns 409 when resume token is invalid", async () => {
       vi.mocked(mockManager.approve).mockRejectedValueOnce(
         new InvalidResumeTokenError()
       );
@@ -143,7 +143,7 @@ describe("Hono Approval Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(409);
       const data = await res.json();
       expect(data.ok).toBe(false);
       expect(data.error.type).toBe("invalid_resume_token");
@@ -304,7 +304,7 @@ describe("Hono Approval Routes", () => {
       expect(data.error.type).toBe("not_found");
     });
 
-    it("returns 403 when resume token is invalid", async () => {
+    it("returns 409 when resume token is invalid", async () => {
       vi.mocked(mockManager.reject).mockRejectedValueOnce(
         new InvalidResumeTokenError()
       );
@@ -319,7 +319,7 @@ describe("Hono Approval Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(409);
       const data = await res.json();
       expect(data.ok).toBe(false);
       expect(data.error.type).toBe("invalid_resume_token");
@@ -481,7 +481,7 @@ describe("Hono Approval Routes", () => {
       expect(data.error.type).toBe("not_found");
     });
 
-    it("returns 403 when resume token is invalid", async () => {
+    it("returns 409 when resume token is invalid", async () => {
       vi.mocked(mockManager.requestChanges).mockRejectedValueOnce(
         new InvalidResumeTokenError()
       );
@@ -496,7 +496,7 @@ describe("Hono Approval Routes", () => {
         }),
       });
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(409);
       const data = await res.json();
       expect(data.ok).toBe(false);
       expect(data.error.type).toBe("invalid_resume_token");
