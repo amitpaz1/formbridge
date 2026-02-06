@@ -397,6 +397,10 @@ The test suite covers:
 - [ ] Form analytics dashboard with charts
 - [ ] Hosted cloud version
 
+## See Also
+
+**[AgentGate](https://github.com/amitpaz1/agentgate)** — Human-in-the-loop approval system for AI agents. If FormBridge handles *data collection* between agents and humans, AgentGate handles *action approval*. Together they cover the full spectrum of human-AI collaboration: agents gather data (FormBridge), then request permission to act on it (AgentGate).
+
 ## Contributing
 
 Contributions welcome! Please open an issue first to discuss what you'd like to change.
