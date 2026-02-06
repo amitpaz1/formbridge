@@ -234,14 +234,14 @@ export class InMemoryEventStore implements EventStore {
     // Auto-assign monotonically increasing version per submission
     const currentVersion = this.versionCounters.get(event.submissionId) ?? 0;
     const nextVersion = currentVersion + 1;
-    event.version = nextVersion;
+    const versionedEvent = { ...event, version: nextVersion };
     this.versionCounters.set(event.submissionId, nextVersion);
 
     // Append event — insert in order if out-of-sequence, otherwise just push (O(1) typical)
-    this.eventIds.add(event.eventId);
+    this.eventIds.add(versionedEvent.eventId);
     const lastEvent = events[events.length - 1];
-    if (!lastEvent || event.ts >= lastEvent.ts) {
-      events.push(event);
+    if (!lastEvent || versionedEvent.ts >= lastEvent.ts) {
+      events.push(versionedEvent);
     } else {
       // Out-of-order: binary search for insertion point
       let lo = 0;
@@ -249,25 +249,25 @@ export class InMemoryEventStore implements EventStore {
       while (lo < hi) {
         const mid = (lo + hi) >>> 1;
         const midEvent = events[mid];
-        if (midEvent && midEvent.ts <= event.ts) lo = mid + 1;
+        if (midEvent && midEvent.ts <= versionedEvent.ts) lo = mid + 1;
         else hi = mid;
       }
-      events.splice(lo, 0, event);
+      events.splice(lo, 0, versionedEvent);
     }
 
     // Maintain bounded recent events list (newest first)
-    this.recentEvents.unshift(event);
+    this.recentEvents.unshift(versionedEvent);
     if (this.recentEvents.length > this.maxRecentEvents) {
       this.recentEvents.length = this.maxRecentEvents;
     }
 
     // Maintain type index
-    let typeEvents = this.eventsByType.get(event.type);
+    let typeEvents = this.eventsByType.get(versionedEvent.type);
     if (!typeEvents) {
       typeEvents = [];
-      this.eventsByType.set(event.type, typeEvents);
+      this.eventsByType.set(versionedEvent.type, typeEvents);
     }
-    typeEvents.push(event);
+    typeEvents.push(versionedEvent);
   }
 
   /**
