@@ -208,6 +208,7 @@ export function createHonoSubmissionRouter(
   router.post(
     "/intake/:intakeId/submissions/:submissionId/submit",
     async (c: Context) => {
+      const intakeId = c.req.param("intakeId");
       const submissionId = c.req.param("submissionId");
 
       const body = await c.req.json();
@@ -224,6 +225,21 @@ export function createHonoSubmissionRouter(
         return c.json(
           { ok: false, error: { type: "invalid_request", message: actorResult.error } },
           400
+        );
+      }
+
+      // Validate intakeId matches the submission before proceeding
+      const submission = await manager.getSubmission(submissionId);
+      if (!submission) {
+        return c.json(
+          { ok: false, error: { type: "not_found", message: "Submission not found" } },
+          404
+        );
+      }
+      if (submission.intakeId !== intakeId) {
+        return c.json(
+          { ok: false, error: { type: "not_found", message: "Submission not found for intake" } },
+          404
         );
       }
 
