@@ -23,9 +23,9 @@ export interface Actor {
 }
 
 /**
- * Submission lifecycle states (type union)
+ * Core submission lifecycle states (form workflow)
  */
-export type SubmissionState =
+export type CoreSubmissionState =
   | "draft"
   | "in_progress"
   | "awaiting_input"
@@ -36,8 +36,12 @@ export type SubmissionState =
   | "rejected"
   | "finalized"
   | "cancelled"
-  | "expired"
-  // Upload negotiation protocol states
+  | "expired";
+
+/**
+ * MCP session / upload negotiation states
+ */
+export type MCPSessionState =
   | "created"
   | "validating"
   | "invalid"
@@ -47,6 +51,11 @@ export type SubmissionState =
   | "completed"
   | "failed"
   | "pending_approval";
+
+/**
+ * All submission lifecycle states (type union)
+ */
+export type SubmissionState = CoreSubmissionState | MCPSessionState;
 
 /**
  * SubmissionState runtime constants for enum-like access.
@@ -153,17 +162,13 @@ export interface ValidationErrorResponse {
   timestamp?: string;
 }
 
-/**
- * Structured error response envelope.
- * Supports both the full envelope shape (ok, submissionId, error: {...})
- * and the flat shape used by MCP server (type, fields, nextActions at top level).
- */
-export interface IntakeError {
-  ok?: false;
+/** HTTP API error envelope */
+export interface IntakeErrorEnvelope {
+  ok: false;
   submissionId?: SubmissionId;
   state?: SubmissionState;
   resumeToken?: string;
-  error?: {
+  error: {
     type: IntakeErrorType;
     message?: string;
     fields?: FieldError[];
@@ -171,12 +176,26 @@ export interface IntakeError {
     retryable: boolean;
     retryAfterMs?: number;
   };
-  /** Flat shape fields (used by MCP server and error mapper) */
-  type?: IntakeErrorType | string;
-  message?: string;
-  fields?: FieldError[];
-  nextActions?: NextAction[];
+}
+
+/** Flat MCP error shape */
+export interface IntakeErrorFlat {
+  type: IntakeErrorType | string;
+  message: string;
+  fields: FieldError[];
+  nextActions: NextAction[];
   timestamp?: string;
+}
+
+/** Union of error shapes */
+export type IntakeError = IntakeErrorEnvelope | IntakeErrorFlat;
+
+export function isEnvelopeError(error: IntakeError): error is IntakeErrorEnvelope {
+  return 'ok' in error && error.ok === false;
+}
+
+export function isFlatError(error: IntakeError): error is IntakeErrorFlat {
+  return !('ok' in error) && 'type' in error && 'fields' in error;
 }
 
 /**
@@ -385,7 +404,7 @@ export interface SubmissionSuccess {
 export type SubmissionResponse = SubmissionSuccess | IntakeError | ValidationErrorResponse;
 
 /**
- * Factory function for creating IntakeError objects with proper typing.
+ * Factory function for creating IntakeErrorEnvelope objects with proper typing.
  * Eliminates the need for `as IntakeError` assertions.
  */
 export function createIntakeError(params: {
@@ -398,7 +417,7 @@ export function createIntakeError(params: {
   retryAfterMs?: number;
   fields?: FieldError[];
   nextActions?: NextAction[];
-}): IntakeError {
+}): IntakeErrorEnvelope {
   return {
     ok: false,
     submissionId: params.submissionId,
@@ -422,11 +441,10 @@ export function createIntakeError(params: {
  */
 export function isIntakeError(response: unknown): response is IntakeError {
   if (response && typeof response === "object") {
-    // Structured shape: { ok: false, error: { ... } }
-    // SAFE: 'in' check above proves 'ok' exists; cast needed for property access
+    // Envelope shape: { ok: false, error: { ... } }
     if ("ok" in response && (response as Record<string, unknown>).ok === false) return true;
-    // Flat shape: { type, fields, nextActions }
-    if ("type" in response && "fields" in response && "nextActions" in response) return true;
+    // Flat shape: { type, fields }
+    if ("type" in response && "fields" in response) return true;
   }
   return false;
 }

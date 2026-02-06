@@ -103,7 +103,7 @@ describe("Event Stream & Audit Trail Integration", () => {
   beforeEach(() => {
     store = new InMemorySubmissionStore();
     eventEmitter = new InMemoryEventEmitter();
-    manager = new SubmissionManager(store, eventEmitter, undefined, "http://localhost:3000");
+    manager = new SubmissionManager({ store, eventEmitter, baseUrl: "http://localhost:3000" });
   });
 
   describe("Complete Audit Trail", () => {

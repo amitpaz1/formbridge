@@ -69,7 +69,7 @@ export function createHonoApprovalRouter(
         comment,
       });
 
-      if (!result.ok) {
+      if (!('ok' in result) || !result.ok) {
         return c.json(result, 409);
       }
 
@@ -142,7 +142,7 @@ export function createHonoApprovalRouter(
         comment,
       });
 
-      if (!result.ok) {
+      if (!('ok' in result) || !result.ok) {
         return c.json(result, 409);
       }
 
@@ -221,7 +221,7 @@ export function createHonoApprovalRouter(
         comment,
       });
 
-      if (!result.ok) {
+      if (!('ok' in result) || !result.ok) {
         return c.json(result, 409);
       }
 

@@ -17,6 +17,7 @@ import {
   SubmissionNotFoundError,
   InvalidResumeTokenError,
   InvalidStateError,
+  timingSafeTokenCompare,
 } from "./errors.js";
 
 // Re-export for backward compatibility — consumers import from here
@@ -124,39 +125,56 @@ export class ApprovalManager {
   ) {}
 
   /**
-   * Approve a submission
-   * Transitions from needs_review to approved
+   * Validate that a submission exists, the resume token matches,
+   * and the submission is in the needs_review state.
+   * Returns the Submission on success, or an IntakeError on state mismatch.
    */
-  async approve(
-    request: ApproveRequest
-  ): Promise<ApprovalResponse | IntakeError> {
-    // Get submission by ID
-    const submission = await this.store.get(request.submissionId);
+  private async validateReviewRequest(
+    submissionId: string,
+    resumeToken: string,
+    actionLabel: string
+  ): Promise<Submission | IntakeError> {
+    const submission = await this.store.get(submissionId);
 
     if (!submission) {
-      throw new SubmissionNotFoundError(request.submissionId);
+      throw new SubmissionNotFoundError(submissionId);
     }
 
-    // Verify resume token matches
-    if (submission.resumeToken !== request.resumeToken) {
+    if (!timingSafeTokenCompare(submission.resumeToken, resumeToken)) {
       throw new InvalidResumeTokenError();
     }
 
-    // Check if submission is in needs_review state
     if (submission.state !== "needs_review") {
-      const error: IntakeError = {
+      return {
         ok: false,
         submissionId: submission.id,
         state: submission.state,
         resumeToken: submission.resumeToken,
         error: {
           type: "conflict",
-          message: `Cannot approve submission in state '${submission.state}'`,
+          message: `Cannot ${actionLabel} submission in state '${submission.state}'`,
           retryable: false,
         },
       };
-      return error;
     }
+
+    return submission;
+  }
+
+  /**
+   * Approve a submission
+   * Transitions from needs_review to approved
+   */
+  async approve(
+    request: ApproveRequest
+  ): Promise<ApprovalResponse | IntakeError> {
+    const result = await this.validateReviewRequest(
+      request.submissionId,
+      request.resumeToken,
+      "approve"
+    );
+    if ("ok" in result && result.ok === false) return result;
+    const submission = result as Submission;
 
     const now = new Date().toISOString();
 
@@ -212,33 +230,13 @@ export class ApprovalManager {
   async reject(
     request: RejectRequest
   ): Promise<ApprovalResponse | IntakeError> {
-    // Get submission by ID
-    const submission = await this.store.get(request.submissionId);
-
-    if (!submission) {
-      throw new SubmissionNotFoundError(request.submissionId);
-    }
-
-    // Verify resume token matches
-    if (submission.resumeToken !== request.resumeToken) {
-      throw new InvalidResumeTokenError();
-    }
-
-    // Check if submission is in needs_review state
-    if (submission.state !== "needs_review") {
-      const error: IntakeError = {
-        ok: false,
-        submissionId: submission.id,
-        state: submission.state,
-        resumeToken: submission.resumeToken,
-        error: {
-          type: "conflict",
-          message: `Cannot reject submission in state '${submission.state}'`,
-          retryable: false,
-        },
-      };
-      return error;
-    }
+    const result = await this.validateReviewRequest(
+      request.submissionId,
+      request.resumeToken,
+      "reject"
+    );
+    if ("ok" in result && result.ok === false) return result;
+    const submission = result as Submission;
 
     const now = new Date().toISOString();
 
@@ -296,33 +294,13 @@ export class ApprovalManager {
   async requestChanges(
     request: RequestChangesRequest
   ): Promise<ApprovalResponse | IntakeError> {
-    // Get submission by ID
-    const submission = await this.store.get(request.submissionId);
-
-    if (!submission) {
-      throw new SubmissionNotFoundError(request.submissionId);
-    }
-
-    // Verify resume token matches
-    if (submission.resumeToken !== request.resumeToken) {
-      throw new InvalidResumeTokenError();
-    }
-
-    // Check if submission is in needs_review state
-    if (submission.state !== "needs_review") {
-      const error: IntakeError = {
-        ok: false,
-        submissionId: submission.id,
-        state: submission.state,
-        resumeToken: submission.resumeToken,
-        error: {
-          type: "conflict",
-          message: `Cannot request changes on submission in state '${submission.state}'`,
-          retryable: false,
-        },
-      };
-      return error;
-    }
+    const result = await this.validateReviewRequest(
+      request.submissionId,
+      request.resumeToken,
+      "request changes on"
+    );
+    if ("ok" in result && result.ok === false) return result;
+    const submission = result as Submission;
 
     const now = new Date().toISOString();
 

@@ -7,7 +7,7 @@ import type { IntakeDefinition } from '../../schemas/intake-schema.js';
 import type { SubmissionResponse } from '../../types/intake-contract.js';
 import { validatePartialSubmission } from '../../validation/validator.js';
 import { mapToIntakeError } from '../../validation/error-mapper.js';
-import type { SubmissionStore } from '../submission-store.js';
+import type { MCPSessionStore } from '../submission-store.js';
 import { SubmissionId } from '../../types/branded.js';
 
 const CreateArgsSchema = z.object({
@@ -18,7 +18,7 @@ const CreateArgsSchema = z.object({
 export async function handleCreate(
   intake: IntakeDefinition,
   args: Record<string, unknown>,
-  store: SubmissionStore
+  store: MCPSessionStore
 ): Promise<SubmissionResponse> {
   const { data, idempotencyKey } = CreateArgsSchema.parse(args);
 

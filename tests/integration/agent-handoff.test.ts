@@ -85,7 +85,7 @@ describe("Agent-to-Human Handoff Integration", () => {
   beforeEach(() => {
     store = new InMemorySubmissionStore();
     eventEmitter = new InMemoryEventEmitter();
-    manager = new SubmissionManager(store, eventEmitter, undefined, "http://localhost:3000");
+    manager = new SubmissionManager({ store, eventEmitter, baseUrl: "http://localhost:3000" });
     mcpServer = createMcpServer(manager);
   });
 
@@ -526,12 +526,11 @@ describe("Agent-to-Human Handoff Integration", () => {
     });
 
     it("should use custom base URL when provided to SubmissionManager", async () => {
-      const customManager = new SubmissionManager(
+      const customManager = new SubmissionManager({
         store,
         eventEmitter,
-        undefined,
-        "https://forms.example.com"
-      );
+        baseUrl: "https://forms.example.com",
+      });
 
       const createRequest: CreateSubmissionRequest = {
         intakeId: "intake_test",

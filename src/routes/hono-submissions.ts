@@ -235,8 +235,10 @@ export function createHonoSubmissionRouter(
           idempotencyKey: body.idempotencyKey,
         });
 
-        if (!result.ok) {
-          const errorType = result.error?.type ?? "unknown";
+        if (!('ok' in result) || !result.ok) {
+          const errorType = 'error' in result && result.error != null && typeof result.error === 'object' && 'type' in result.error
+            ? (result.error as { type: string }).type
+            : ('type' in result ? (result as { type: string }).type : "unknown");
           const status =
             errorType === "conflict"
               ? 409

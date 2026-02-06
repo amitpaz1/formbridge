@@ -121,9 +121,9 @@ describe("Hono Event Route pagination", () => {
     const store = new TestStore();
     const emitter = new TestEmitter();
     const eventStore = new InMemoryEventStore();
-    manager = new SubmissionManager(
-      store, emitter, undefined, "http://localhost:3000", undefined, eventStore
-    );
+    manager = new SubmissionManager({
+      store, eventEmitter: emitter, baseUrl: "http://localhost:3000", eventStore,
+    });
 
     app = new Hono();
     app.route("/", createHonoEventRouter(manager));

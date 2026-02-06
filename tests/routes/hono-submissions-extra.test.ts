@@ -55,7 +55,7 @@ describe("Hono Submissions Route - Error Handling", () => {
     const emitter = new TestEmitter();
     registry = new TestRegistry();
     const eventStore = new InMemoryEventStore();
-    manager = new SubmissionManager(store, emitter, registry, "http://localhost:3000", undefined, eventStore);
+    manager = new SubmissionManager({ store, eventEmitter: emitter, intakeRegistry: registry, baseUrl: "http://localhost:3000", eventStore });
 
     app = new Hono();
     app.route("/", createHonoSubmissionRouter(manager));

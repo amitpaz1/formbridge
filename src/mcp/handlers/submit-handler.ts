@@ -8,7 +8,7 @@ import type { SubmissionResponse } from '../../types/intake-contract.js';
 import { SubmissionState } from '../../types/intake-contract.js';
 import { validateSubmission } from '../../validation/validator.js';
 import { mapToIntakeError } from '../../validation/error-mapper.js';
-import type { SubmissionStore } from '../submission-store.js';
+import type { MCPSessionStore } from '../submission-store.js';
 import { lookupEntry, isError } from '../response-builder.js';
 import { SubmissionId } from '../../types/branded.js';
 
@@ -19,7 +19,7 @@ const SubmitArgsSchema = z.object({
 export async function handleSubmit(
   intake: IntakeDefinition,
   args: Record<string, unknown>,
-  store: SubmissionStore
+  store: MCPSessionStore
 ): Promise<SubmissionResponse> {
   const { resumeToken } = SubmitArgsSchema.parse(args);
 

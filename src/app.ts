@@ -30,11 +30,9 @@ import { WebhookManager } from './core/webhook-manager.js';
 import { Validator } from './core/validator.js';
 import type { IntakeDefinition } from './submission-types.js';
 import type { Submission } from './submission-types.js';
-import type {
-  IntakeEvent,
-  Destination,
-} from './types/intake-contract.js';
-import type { WebhookNotifier, ReviewerNotification } from './core/approval-manager.js';
+import { BridgingEventEmitter } from './core/bridging-event-emitter.js';
+import { WebhookNotifierImpl } from './core/webhook-notifier-impl.js';
+import { ExpiryScheduler } from './core/expiry-scheduler.js';
 import { redactEventTokens } from './routes/event-sanitizer.js';
 import { parseActor } from './routes/shared/actor-validation.js';
 import { SubmissionId, IntakeId, ResumeToken } from "./types/branded.js";
@@ -241,99 +239,6 @@ class InMemorySubmissionStore {
     return this.submissions.size;
   }
 }
-
-/**
- * Bridging event emitter — fans out events to multiple listeners.
- */
-class BridgingEventEmitter {
-  private listeners: Array<(event: IntakeEvent) => Promise<void>> = [];
-
-  addListener(listener: (event: IntakeEvent) => Promise<void>): void {
-    this.listeners.push(listener);
-  }
-
-  async emit(event: IntakeEvent): Promise<void> {
-    // Use allSettled for error isolation — one failing listener won't block others
-    const results = await Promise.allSettled(this.listeners.map((fn) => fn(event)));
-    for (const result of results) {
-      if (result.status === 'rejected') {
-        console.error('[BridgingEventEmitter] Listener error:', result.reason);
-      }
-    }
-  }
-}
-
-/**
- * WebhookNotifierImpl — bridges ApprovalManager's WebhookNotifier to WebhookManager.
- * Formats ReviewerNotification payloads and delivers via the existing webhook infrastructure
- * (HMAC signing, exponential backoff retry, delivery queue tracking).
- */
-class WebhookNotifierImpl implements WebhookNotifier {
-  constructor(
-    private webhookManager: WebhookManager,
-    private notificationUrl?: string
-  ) {}
-
-  async notifyReviewers(notification: ReviewerNotification): Promise<void> {
-    if (!this.notificationUrl) return;
-
-    // Build a synthetic Submission-like object for the webhook manager
-    const syntheticSubmission: Submission = {
-      id: SubmissionId(notification.submissionId),
-      intakeId: IntakeId(notification.intakeId),
-      state: notification.state,
-      resumeToken: ResumeToken(''),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      fields: notification.fields,
-      fieldAttribution: {},
-      createdBy: notification.createdBy,
-      updatedBy: notification.createdBy,
-      events: [],
-    };
-
-    const destination: Destination = {
-      kind: 'webhook',
-      url: this.notificationUrl,
-    };
-
-    await this.webhookManager.enqueueDelivery(syntheticSubmission, destination);
-  }
-}
-
-/**
- * ExpiryScheduler — periodically expires stale submissions via SubmissionManager.
- * Uses setInterval with configurable interval (default 60s).
- */
-class ExpiryScheduler {
-  private timer: ReturnType<typeof setInterval> | null = null;
-
-  constructor(
-    private manager: SubmissionManager,
-    private intervalMs: number = 60_000
-  ) {}
-
-  start(): void {
-    if (this.timer) return;
-    this.timer = setInterval(() => {
-      this.manager.expireStaleSubmissions().catch((err) => {
-        console.error('[ExpiryScheduler] Error expiring submissions:', err);
-      });
-    }, this.intervalMs);
-    // unref() so the timer doesn't prevent Node.js process/test exit
-    if (this.timer && typeof this.timer === 'object' && 'unref' in this.timer) {
-      this.timer.unref();
-    }
-  }
-
-  stop(): void {
-    if (this.timer) {
-      clearInterval(this.timer);
-      this.timer = null;
-    }
-  }
-}
-
 /**
  * Options for createFormBridgeApp
  */
@@ -413,7 +318,7 @@ export function createFormBridgeAppWithIntakes(
   // Pass the shared eventStore to SubmissionManager — it already appends events
   // via its triple-write pattern (submission.events + emitter.emit + eventStore.appendEvent).
   // No need for an additional listener on the emitter to avoid duplicates.
-  const manager = new SubmissionManager(store, emitter, registry, 'http://localhost:3000', undefined, eventStore);
+  const manager = new SubmissionManager({ store, eventEmitter: emitter, intakeRegistry: registry, baseUrl: 'http://localhost:3000', eventStore });
 
   // Webhook manager — wired to receive events from the bridging emitter
   const signingSecret = process.env['FORMBRIDGE_WEBHOOK_SECRET'];
@@ -612,7 +517,7 @@ export function createFormBridgeAppWithIntakes(
         fields: initFields,
       });
 
-      if (setResult.ok) {
+      if ('ok' in setResult && setResult.ok) {
         const intake = registry.getIntake(intakeId);
         const schema = extractSchemaRequired(intake.schema);
         const requiredFields = schema.required ?? [];
@@ -790,7 +695,7 @@ export function createFormBridgeAppWithIntakes(
         fields,
       });
 
-      if (!result.ok) {
+      if (!('ok' in result) || !result.ok) {
         // IntakeError — return appropriate status
         let isTokenError = false;
         if ('error' in result && result.error != null && typeof result.error === 'object' && 'type' in result.error) {

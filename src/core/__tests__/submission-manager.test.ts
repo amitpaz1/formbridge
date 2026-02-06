@@ -84,7 +84,7 @@ describe("SubmissionManager", () => {
   beforeEach(() => {
     store = new MockSubmissionStore();
     eventEmitter = new MockEventEmitter();
-    manager = new SubmissionManager(store, eventEmitter);
+    manager = new SubmissionManager({ store, eventEmitter });
   });
 
   describe("createSubmission", () => {
@@ -390,12 +390,11 @@ describe("SubmissionManager", () => {
     });
 
     it("should use custom base URL when provided", async () => {
-      const customManager = new SubmissionManager(
+      const customManager = new SubmissionManager({
         store,
         eventEmitter,
-        undefined,
-        "https://forms.example.com"
-      );
+        baseUrl: "https://forms.example.com",
+      });
 
       const createRequest: CreateSubmissionRequest = {
         intakeId: "intake_vendor_onboarding",
@@ -607,11 +606,11 @@ describe("SubmissionManager", () => {
         }),
       };
 
-      const managerWithApproval = new SubmissionManager(
+      const managerWithApproval = new SubmissionManager({
         store,
         eventEmitter,
-        mockIntakeRegistry
-      );
+        intakeRegistry: mockIntakeRegistry,
+      });
 
       // Create a submission
       const createRequest: CreateSubmissionRequest = {
@@ -665,11 +664,11 @@ describe("SubmissionManager", () => {
         }),
       };
 
-      const managerWithoutApproval = new SubmissionManager(
+      const managerWithoutApproval = new SubmissionManager({
         store,
         eventEmitter,
-        mockIntakeRegistry
-      );
+        intakeRegistry: mockIntakeRegistry,
+      });
 
       // Create a submission
       const createRequest: CreateSubmissionRequest = {
@@ -747,11 +746,11 @@ describe("SubmissionManager", () => {
         },
       };
 
-      const managerWithRegistry = new SubmissionManager(
+      const managerWithRegistry = new SubmissionManager({
         store,
         eventEmitter,
-        mockIntakeRegistry
-      );
+        intakeRegistry: mockIntakeRegistry,
+      });
 
       // Create a submission
       const createRequest: CreateSubmissionRequest = {

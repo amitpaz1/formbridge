@@ -16,6 +16,7 @@ import type { Context } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HTTPException } from 'hono/http-exception';
 import type { IntakeError, SubmissionState } from '../submission-types.js';
+import type { IntakeErrorEnvelope } from '../types/intake-contract.js';
 import type { SubmissionId } from '../types/branded.js';
 import {
   IntakeNotFoundError,
@@ -44,16 +45,16 @@ export class SubmissionError extends Error {
     public submissionId: SubmissionId,
     public state: SubmissionState,
     public resumeToken: string,
-    public intakeError: NonNullable<IntakeError['error']>
+    public intakeError: NonNullable<IntakeErrorEnvelope['error']>
   ) {
     super(intakeError.message || 'Submission error');
     this.name = 'SubmissionError';
   }
 
   /**
-   * Converts this error to an IntakeError response
+   * Converts this error to an IntakeErrorEnvelope response
    */
-  toIntakeError(): IntakeError {
+  toIntakeError(): IntakeErrorEnvelope {
     return {
       ok: false,
       submissionId: this.submissionId,
@@ -273,7 +274,7 @@ export function createSubmissionError(
   submissionId: SubmissionId,
   state: SubmissionState,
   resumeToken: string,
-  errorDetails: NonNullable<IntakeError['error']>
+  errorDetails: NonNullable<IntakeErrorEnvelope['error']>
 ): SubmissionError {
   return new SubmissionError(submissionId, state, resumeToken, errorDetails);
 }

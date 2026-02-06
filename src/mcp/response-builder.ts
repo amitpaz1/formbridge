@@ -4,7 +4,7 @@
  */
 
 import type { IntakeError } from '../types/intake-contract.js';
-import type { SubmissionStore, MCPSubmissionEntry } from './submission-store.js';
+import type { MCPSessionStore, MCPSubmissionEntry } from './submission-store.js';
 import type { IntakeDefinition } from '../schemas/intake-schema.js';
 
 /**
@@ -81,7 +81,7 @@ export function intakeMismatchError(actualIntakeId: string, requestedIntakeId: s
  * Returns the entry or an IntakeError if lookup fails.
  */
 export function lookupEntry(
-  store: SubmissionStore,
+  store: MCPSessionStore,
   resumeToken: string,
   intake: IntakeDefinition
 ): MCPSubmissionEntry | IntakeError {

@@ -6,6 +6,7 @@
  */
 
 import type { SubmissionState } from "../types/intake-contract.js";
+import { timingSafeEqual } from "crypto";
 
 export class SubmissionNotFoundError extends Error {
   constructor(identifier: string) {
@@ -35,4 +36,13 @@ export class InvalidStateError extends Error {
     );
     this.name = "InvalidStateError";
   }
+}
+
+/**
+ * Constant-time string comparison for resume tokens.
+ * Prevents timing attacks that could leak token characters.
+ */
+export function timingSafeTokenCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
 }

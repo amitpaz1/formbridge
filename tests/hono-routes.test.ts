@@ -59,7 +59,7 @@ describe("Hono Submission Routes", () => {
     store = new TestStore();
     const emitter = new TestEmitter();
     const eventStore = new InMemoryEventStore();
-    manager = new SubmissionManager(store, emitter, undefined, "http://localhost:3000", undefined, eventStore);
+    manager = new SubmissionManager({ store, eventEmitter: emitter, baseUrl: "http://localhost:3000", eventStore });
 
     app = new Hono();
     app.route("/", createHonoSubmissionRouter(manager));
@@ -148,7 +148,7 @@ describe("Hono Submit Endpoint", () => {
     const store = new TestStore();
     const emitter = new TestEmitter();
     const eventStore = new InMemoryEventStore();
-    manager = new SubmissionManager(store, emitter, undefined, "http://localhost:3000", undefined, eventStore);
+    manager = new SubmissionManager({ store, eventEmitter: emitter, baseUrl: "http://localhost:3000", eventStore });
 
     app = new Hono();
     app.route("/", createHonoSubmissionRouter(manager));
@@ -220,7 +220,7 @@ describe("Hono Submit Endpoint", () => {
     const store = new TestStore();
     const emitter = new TestEmitter();
     const eventStore = new InMemoryEventStore();
-    const mgr = new SubmissionManager(store, emitter, registry, "http://localhost:3000", undefined, eventStore);
+    const mgr = new SubmissionManager({ store, eventEmitter: emitter, intakeRegistry: registry, baseUrl: "http://localhost:3000", eventStore });
 
     const a = new Hono();
     a.route("/", createHonoSubmissionRouter(mgr));
@@ -257,7 +257,7 @@ describe("Hono Event Routes", () => {
     const store = new TestStore();
     const emitter = new TestEmitter();
     const eventStore = new InMemoryEventStore();
-    manager = new SubmissionManager(store, emitter, undefined, "http://localhost:3000", undefined, eventStore);
+    manager = new SubmissionManager({ store, eventEmitter: emitter, baseUrl: "http://localhost:3000", eventStore });
 
     app = new Hono();
     app.route("/", createHonoEventRouter(manager));
@@ -347,7 +347,7 @@ describe("Hono Approval Routes", () => {
     const registry = new TestRegistry();
     registry.register("approval-intake", [{ type: "manual" }]);
     const eventStore = new InMemoryEventStore();
-    submissionManager = new SubmissionManager(store, emitter, registry, "http://localhost:3000", undefined, eventStore);
+    submissionManager = new SubmissionManager({ store, eventEmitter: emitter, intakeRegistry: registry, baseUrl: "http://localhost:3000", eventStore });
     approvalManager = new ApprovalManager(store, emitter);
 
     app = new Hono();

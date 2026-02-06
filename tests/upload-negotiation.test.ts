@@ -163,13 +163,12 @@ describe('Upload Negotiation Integration Tests', () => {
 
     mockStore = new MockStore();
     const mockEventEmitter = new MockEventEmitter();
-    submissionManager = new SubmissionManager(
-      mockStore,
-      mockEventEmitter,
-      undefined,
-      'http://localhost:3000',
-      storage
-    );
+    submissionManager = new SubmissionManager({
+      store: mockStore,
+      eventEmitter: mockEventEmitter,
+      baseUrl: 'http://localhost:3000',
+      storageBackend: storage,
+    });
 
     // Create test actor
     testActor = {

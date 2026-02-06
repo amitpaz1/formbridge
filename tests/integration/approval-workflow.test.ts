@@ -120,11 +120,11 @@ describe('Approval Workflow End-to-End', () => {
     eventEmitter = new MockEventEmitter();
     intakeRegistry = new MockIntakeRegistry();
 
-    submissionManager = new SubmissionManager(
+    submissionManager = new SubmissionManager({
       store,
       eventEmitter,
-      intakeRegistry
-    );
+      intakeRegistry,
+    });
 
     approvalManager = new ApprovalManager(store, eventEmitter);
   });

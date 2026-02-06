@@ -121,19 +121,31 @@ export interface ConfirmUploadOutput {
  * SubmissionManager orchestrates the submission lifecycle
  * with field-level actor attribution for audit trails
  */
+export interface SubmissionManagerOptions {
+  store: SubmissionStore;
+  eventEmitter: EventEmitter;
+  intakeRegistry?: IntakeRegistry;
+  baseUrl?: string;
+  storageBackend?: StorageBackend;
+  eventStore?: EventStore;
+}
+
 export class SubmissionManager {
+  private store: SubmissionStore;
+  private eventEmitter: EventEmitter;
+  private intakeRegistry?: IntakeRegistry;
+  private baseUrl: string;
+  private storageBackend?: StorageBackend;
   private eventStore: EventStore;
 
-  constructor(
-    private store: SubmissionStore,
-    private _eventEmitter: EventEmitter,
-    private intakeRegistry?: IntakeRegistry,
-    private baseUrl: string = "http://localhost:3000",
-    private storageBackend?: StorageBackend,
-    eventStore?: EventStore
-  ) {
+  constructor(options: SubmissionManagerOptions) {
+    this.store = options.store;
+    this.eventEmitter = options.eventEmitter;
+    this.intakeRegistry = options.intakeRegistry;
+    this.baseUrl = options.baseUrl ?? "http://localhost:3000";
+    this.storageBackend = options.storageBackend;
     // Initialize event store (defaults to in-memory implementation)
-    this.eventStore = eventStore ?? new InMemoryEventStore();
+    this.eventStore = options.eventStore ?? new InMemoryEventStore();
   }
 
   /**
@@ -149,7 +161,7 @@ export class SubmissionManager {
     submission.events.push(event);
     // Emit and append are independent — run in parallel
     await Promise.all([
-      this._eventEmitter.emit(event),
+      this.eventEmitter.emit(event),
       this.eventStore.appendEvent(event),
     ]);
     await this.store.save(submission);

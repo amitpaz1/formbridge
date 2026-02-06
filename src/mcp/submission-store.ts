@@ -3,7 +3,7 @@
  *
  * Contains two store implementations:
  * 1. InMemorySubmissionStore - Used by SubmissionManager for field attribution tracking
- * 2. SubmissionStore - Used by FormBridgeMCPServer for MCP session management
+ * 2. MCPSessionStore - Used by FormBridgeMCPServer for MCP session management
  */
 
 import { randomBytes } from 'crypto';
@@ -125,7 +125,7 @@ export class InMemorySubmissionStore implements ISubmissionStore {
 }
 
 // =============================================================================
-// § SubmissionStore - for FormBridgeMCPServer (MCP session management)
+// § MCPSessionStore - for FormBridgeMCPServer (MCP session management)
 // =============================================================================
 
 /**
@@ -158,7 +158,7 @@ export interface MCPSubmissionEntry {
  * Tracks active submission sessions with resumeToken-based access.
  * In production, this should be replaced with a persistent store.
  */
-export class SubmissionStore {
+export class MCPSessionStore {
   private submissions = new Map<string, MCPSubmissionEntry>();
   private idempotencyKeys = new Map<string, string>(); // idempotencyKey -> resumeToken
 

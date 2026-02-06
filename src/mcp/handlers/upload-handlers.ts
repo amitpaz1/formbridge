@@ -7,7 +7,7 @@ import type { IntakeDefinition } from '../../schemas/intake-schema.js';
 import type { IntakeError } from '../../types/intake-contract.js';
 import type { MCPServerConfig } from '../../types/mcp-tool-definitions.js';
 import { convertZodToJsonSchema } from '../../schemas/json-schema-converter.js';
-import type { SubmissionStore } from '../submission-store.js';
+import type { MCPSessionStore } from '../submission-store.js';
 import { lookupEntry, isError, toRecord } from '../response-builder.js';
 
 const RequestUploadArgsSchema = z.object({
@@ -26,7 +26,7 @@ const ConfirmUploadArgsSchema = z.object({
 export async function handleRequestUpload(
   intake: IntakeDefinition,
   args: Record<string, unknown>,
-  store: SubmissionStore,
+  store: MCPSessionStore,
   storageBackend?: MCPServerConfig['storageBackend']
 ): Promise<Record<string, unknown>> {
   const { resumeToken, field, filename, mimeType, sizeBytes } = RequestUploadArgsSchema.parse(args);
@@ -108,7 +108,7 @@ export async function handleRequestUpload(
 export async function handleConfirmUpload(
   intake: IntakeDefinition,
   args: Record<string, unknown>,
-  store: SubmissionStore,
+  store: MCPSessionStore,
   storageBackend?: MCPServerConfig['storageBackend']
 ): Promise<Record<string, unknown>> {
   const { resumeToken, uploadId } = ConfirmUploadArgsSchema.parse(args);

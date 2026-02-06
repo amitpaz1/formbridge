@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { 
   InMemorySubmissionStore, 
-  SubmissionStore, 
+  MCPSessionStore, 
   type MCPSubmissionEntry 
 } from "../../src/mcp/submission-store";
 import type { Submission } from "../../src/submission-types";
@@ -177,11 +177,11 @@ describe("InMemorySubmissionStore", () => {
   });
 });
 
-describe("SubmissionStore (MCP)", () => {
-  let store: SubmissionStore;
+describe("MCPSessionStore (MCP)", () => {
+  let store: MCPSessionStore;
 
   beforeEach(() => {
-    store = new SubmissionStore();
+    store = new MCPSessionStore();
   });
 
   describe("update - non-existent entry", () => {
