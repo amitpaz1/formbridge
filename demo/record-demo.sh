@@ -142,4 +142,4 @@ sleep 0.1
 echo -e "${BLUE}  → github.com/amitpaz1/formbridge${NC}"
 sleep 0.1
 echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-sleep 3
+sleep 8
