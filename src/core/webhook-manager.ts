@@ -248,8 +248,8 @@ export class WebhookManager {
     await this.queue.enqueue(record, context);
 
     // Process asynchronously (non-blocking)
-    this.processDelivery(record, submission, destination).catch(() => {
-      // Errors are tracked in the delivery record
+    this.processDelivery(record, submission, destination).catch((err) => {
+      console.error('[WebhookManager] processDelivery error:', err);
     });
 
     return deliveryId;
@@ -463,8 +463,8 @@ export class WebhookManager {
       };
 
       // Process the delivery (non-blocking)
-      this.processDelivery(record, submission, destination).catch(() => {
-        // Errors tracked in delivery record
+      this.processDelivery(record, submission, destination).catch((err) => {
+        console.error('[WebhookManager] processDelivery error:', err);
       });
     }
   }
