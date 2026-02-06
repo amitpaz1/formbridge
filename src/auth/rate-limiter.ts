@@ -28,15 +28,23 @@ export class RateLimiter {
   private readonly config: RateLimitConfig;
   /** Map of key -> array of request timestamps */
   private readonly windows: Map<string, number[]> = new Map();
+  private checkCount = 0;
+  private readonly cleanupEvery: number;
 
-  constructor(config: RateLimitConfig) {
+  constructor(config: RateLimitConfig, cleanupEvery = 100) {
     this.config = config;
+    this.cleanupEvery = cleanupEvery;
   }
 
   /**
    * Check if a request is allowed and record it if so.
    */
   check(key: string): RateLimitResult {
+    if (++this.checkCount >= this.cleanupEvery) {
+      this.checkCount = 0;
+      this.cleanup();
+    }
+
     const now = Date.now();
     const windowStart = now - this.config.windowMs;
 
