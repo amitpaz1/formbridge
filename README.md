@@ -13,6 +13,10 @@ Mixed-mode agent-human form submission infrastructure. AI agents fill what they 
 [![@formbridge/shared](https://img.shields.io/npm/v/@formbridge/shared?label=%40formbridge%2Fshared)](https://www.npmjs.com/package/@formbridge/shared)
 [![@formbridge/templates](https://img.shields.io/npm/v/@formbridge/templates?label=%40formbridge%2Ftemplates)](https://www.npmjs.com/package/@formbridge/templates)
 
+<p align="center">
+  <img src="docs/public/demo.gif" alt="FormBridge Demo" width="700">
+</p>
+
 ## The Problem
 
 AI agents can gather _most_ of the data for a form — but some fields need a human: signatures, file uploads, identity verification, subjective preferences. Existing form tools force you to choose: fully automated _or_ fully manual. Nothing handles the handoff.
