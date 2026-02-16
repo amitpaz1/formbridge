@@ -2,6 +2,7 @@
  * Bridging event emitter — fans out events to multiple listeners.
  */
 import type { IntakeEvent } from '../types/intake-contract.js';
+import { getLogger } from '../logging.js';
 
 export class BridgingEventEmitter {
   private listeners: Array<(event: IntakeEvent) => Promise<void>> = [];
@@ -15,7 +16,7 @@ export class BridgingEventEmitter {
     const results = await Promise.allSettled(this.listeners.map((fn) => fn(event)));
     for (const result of results) {
       if (result.status === 'rejected') {
-        console.error('[BridgingEventEmitter] Listener error:', result.reason);
+        getLogger().error({ err: result.reason, logger: 'bridging-event-emitter' }, 'Listener error');
       }
     }
   }

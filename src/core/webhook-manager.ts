@@ -10,6 +10,7 @@
  */
 
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { getLogger } from "../logging.js";
 import { DeliveryId, EventId, SubmissionId, IntakeId, ResumeToken } from "../types/branded.js";
 import type {
   IntakeEvent,
@@ -249,7 +250,7 @@ export class WebhookManager {
 
     // Process asynchronously (non-blocking)
     this.processDelivery(record, submission, destination).catch((err) => {
-      console.error('[WebhookManager] processDelivery error:', err);
+      getLogger().error({ err, logger: 'webhook-manager' }, 'processDelivery error');
     });
 
     return deliveryId;
@@ -394,7 +395,7 @@ export class WebhookManager {
     if (this.retryTimer) return;
     this.retryTimer = setInterval(() => {
       this.retryPendingDeliveries().catch((err) => {
-        console.error('[WebhookManager] Retry scheduler error:', err);
+        getLogger().error({ err, logger: 'webhook-manager' }, 'Retry scheduler error');
       });
     }, intervalMs);
     // unref() so the timer doesn't prevent process/test exit
@@ -464,7 +465,7 @@ export class WebhookManager {
 
       // Process the delivery (non-blocking)
       this.processDelivery(record, submission, destination).catch((err) => {
-        console.error('[WebhookManager] processDelivery error:', err);
+        getLogger().error({ err, logger: 'webhook-manager' }, 'processDelivery error');
       });
     }
   }

@@ -13,6 +13,7 @@
  */
 
 import type { Context } from 'hono';
+import { getLogger } from '../logging.js';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { HTTPException } from 'hono/http-exception';
 import type { IntakeError, SubmissionState } from '../submission-types.js';
@@ -214,10 +215,7 @@ export function createErrorHandler(options?: {
   return (err: Error, c: Context): Response => {
     // Log error if enabled
     if (logErrors) {
-      console.error('[Error Handler]', err);
-      if (includeStack && err.stack) {
-        console.error(err.stack);
-      }
+      getLogger().error({ err, logger: 'error-handler' }, err.message);
     }
 
     // Format error response

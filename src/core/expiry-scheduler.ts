@@ -3,6 +3,7 @@
  * Uses setInterval with configurable interval (default 60s).
  */
 import { SubmissionManager } from './submission-manager.js';
+import { getLogger } from '../logging.js';
 
 export class ExpiryScheduler {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -16,7 +17,7 @@ export class ExpiryScheduler {
     if (this.timer) return;
     this.timer = setInterval(() => {
       this.manager.expireStaleSubmissions().catch((err) => {
-        console.error('[ExpiryScheduler] Error expiring submissions:', err);
+        getLogger().error({ err, logger: 'expiry-scheduler' }, 'Error expiring submissions');
       });
     }, this.intervalMs);
     // unref() so the timer doesn't prevent Node.js process/test exit

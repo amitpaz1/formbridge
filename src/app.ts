@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { secureHeaders } from 'hono/secure-headers';
 import { bodyLimit } from 'hono/body-limit';
 import { createHealthRouter } from './routes/health.js';
+import { createProbeRouter } from './routes/probes.js';
 import { createIntakeRouter } from './routes/intake.js';
 import { createUploadRouter } from './routes/uploads.js';
 import { createHonoSubmissionRouter } from './routes/hono-submissions.js';
@@ -19,7 +20,13 @@ import { createHonoWebhookRouter } from './routes/hono-webhooks.js';
 import { createHonoAnalyticsRouter, type AnalyticsDataProvider, type IntakeMetrics } from './routes/hono-analytics.js';
 import { createErrorHandler } from './middleware/error-handler.js';
 import { createCorsMiddleware, type CorsOptions } from './middleware/cors.js';
-import { createApiKeyAuthMiddleware } from './middleware/auth.js';
+import { createAuthMiddleware, requirePermission, type AuthConfig } from './auth/middleware.js';
+import { loadAuthConfigFromEnv } from './auth/config.js';
+import { requestIdMiddleware } from './middleware/request-id.js';
+import { requestLoggerMiddleware } from './middleware/request-logger.js';
+import { getLogger } from './logging.js';
+import type { FormBridgeStorage } from './storage/storage-interface.js';
+import { MemoryStorage } from './storage/memory-storage.js';
 import { IntakeRegistry } from './core/intake-registry.js';
 import {
   SubmissionManager,
@@ -247,6 +254,8 @@ class InMemorySubmissionStore {
 export interface FormBridgeAppOptions {
   basePath?: string;
   cors?: CorsOptions;
+  auth?: AuthConfig;
+  storage?: FormBridgeStorage;
 }
 
 /**
@@ -255,6 +264,12 @@ export interface FormBridgeAppOptions {
  */
 export function createFormBridgeApp(options?: FormBridgeAppOptions): Hono {
   const app = new Hono();
+  const logger = getLogger();
+  const storage = options?.storage ?? new MemoryStorage();
+
+  // Request ID + structured logging
+  app.use('*', requestIdMiddleware());
+  app.use('*', requestLoggerMiddleware(logger));
 
   // Security headers
   app.use('*', secureHeaders());
@@ -270,8 +285,11 @@ export function createFormBridgeApp(options?: FormBridgeAppOptions): Hono {
     app.use('*', createCorsMiddleware(options.cors));
   }
 
-  // Health check
+  // Health check (liveness probe — unchanged)
   app.route('/health', createHealthRouter());
+
+  // Readiness + Startup probes (FB-E2)
+  app.route('/', createProbeRouter({ storage }));
 
   return app;
 }
@@ -285,6 +303,12 @@ export function createFormBridgeAppWithIntakes(
   options?: FormBridgeAppOptions
 ): Hono {
   const app = new Hono();
+  const logger = getLogger();
+  const storage = options?.storage ?? new MemoryStorage();
+
+  // Request ID + structured logging
+  app.use('*', requestIdMiddleware());
+  app.use('*', requestLoggerMiddleware(logger));
 
   // Security headers
   app.use('*', secureHeaders());
@@ -300,14 +324,20 @@ export function createFormBridgeAppWithIntakes(
     app.use('*', createCorsMiddleware(options.cors));
   }
 
-  // Health check
+  // Health check (liveness probe — unchanged)
   app.route('/health', createHealthRouter());
 
-  // Set up registry
+  // Set up registry (needed before probes for intake count)
   const registry = new IntakeRegistry({ validateOnRegister: true });
   for (const intake of intakes) {
     registry.registerIntake(intake);
   }
+
+  // Readiness + Startup probes (FB-E2)
+  app.route('/', createProbeRouter({
+    storage,
+    getIntakeCount: () => registry.listIntakeIds().length,
+  }));
 
   // Intake schema routes
   app.route('/intake', createIntakeRouter(registry));
@@ -325,7 +355,7 @@ export function createFormBridgeAppWithIntakes(
   // Webhook manager — wired to receive events from the bridging emitter
   const signingSecret = process.env['FORMBRIDGE_WEBHOOK_SECRET'];
   if (!signingSecret) {
-    console.warn('[FormBridge] WARNING: FORMBRIDGE_WEBHOOK_SECRET is not set. Webhooks will be delivered unsigned.');
+    logger.warn('FORMBRIDGE_WEBHOOK_SECRET is not set. Webhooks will be delivered unsigned.');
   }
   const webhookManager = new WebhookManager(undefined, { signingSecret, eventEmitter: emitter });
 
@@ -394,18 +424,56 @@ export function createFormBridgeAppWithIntakes(
     },
   };
 
-  // Hono route modules
+  // Auth middleware — applied to all API routes except health and resume-token routes
+  const authConfig = options?.auth ?? loadAuthConfigFromEnv();
+  const authMiddleware = createAuthMiddleware(authConfig);
+
+  // Apply auth to API routes
+  // NOTE: Resume-token routes (/submissions/resume/*) bypass auth — token IS the credential
+  app.use('/intake/*', authMiddleware);
+  app.use('/webhooks/*', authMiddleware);
+  app.use('/analytics/*', authMiddleware);
+
+  // Permission gates for analytics
+  app.use('/analytics/*', requirePermission('analytics:read'));
+
+  // Webhook permission: retry requires webhook:write, reads require webhook:read
+  app.post('/webhooks/deliveries/:deliveryId/retry', requirePermission('webhook:write'));
+  app.get('/webhooks/*', requirePermission('webhook:read'));
+
+  // Intake read permission for GET /intake/:id
+  app.get('/intake/:id', requirePermission('intake:read'));
+  app.get('/intake/:id/schema', requirePermission('intake:read'));
+
+  // Submit route permission (inside submission router, under /intake/*)
+  app.post('/intake/:intakeId/submissions/:submissionId/submit', requirePermission('submission:write'));
+
+  // Resume-token routes — NO auth (token is the credential)
+  // Registered before auth-gated submission routes
   app.route('/', createHonoSubmissionRouter(manager));
+
+  // Events route
   app.route('/', createHonoEventRouter(manager));
+
+  // Approval routes — auth applied per-route via middleware on the approval router paths
+  app.use('/submissions/:id/approve', authMiddleware);
+  app.use('/submissions/:id/approve', requirePermission('approval:approve'));
+  app.use('/submissions/:id/reject', authMiddleware);
+  app.use('/submissions/:id/reject', requirePermission('approval:reject'));
+  app.use('/submissions/:id/request-changes', authMiddleware);
+  app.use('/submissions/:id/request-changes', requirePermission('approval:approve'));
   app.route('/', createHonoApprovalRouter(approvalManager));
+
+  // Handoff route needs auth
+  app.use('/submissions/:id/handoff', authMiddleware);
+  app.use('/submissions/:id/handoff', requirePermission('submission:write'));
+
+  // Webhook delivery routes under /submissions need auth
+  app.use('/submissions/:id/deliveries', authMiddleware);
+  app.use('/submissions/:id/deliveries', requirePermission('webhook:read'));
 
   // Upload routes
   app.route('/intake', createUploadRouter(registry, manager));
-
-  // Auth middleware for protected routes (dev mode passthrough when no API key set)
-  const apiKeyAuth = createApiKeyAuthMiddleware();
-  app.use('/webhooks/*', apiKeyAuth);
-  app.use('/analytics/*', apiKeyAuth);
 
   // Webhook routes
   app.route('/', createHonoWebhookRouter(webhookManager));
@@ -413,8 +481,8 @@ export function createFormBridgeAppWithIntakes(
   // Analytics routes
   app.route('/', createHonoAnalyticsRouter(analyticsProvider));
 
-  // POST /intake/:intakeId/submissions — create submission
-  app.post('/intake/:intakeId/submissions', async (c) => {
+  // POST /intake/:intakeId/submissions — create submission (submission:write)
+  app.post('/intake/:intakeId/submissions', requirePermission('submission:write'), async (c) => {
     const intakeId = c.req.param('intakeId');
 
     // Verify intake exists
@@ -550,8 +618,8 @@ export function createFormBridgeAppWithIntakes(
     return c.json(rest, 201);
   });
 
-  // GET /intake/:intakeId/submissions/:submissionId — get submission
-  app.get('/intake/:intakeId/submissions/:submissionId', async (c) => {
+  // GET /intake/:intakeId/submissions/:submissionId — get submission (submission:read)
+  app.get('/intake/:intakeId/submissions/:submissionId', requirePermission('submission:read'), async (c) => {
     const intakeId = c.req.param('intakeId');
     const submissionId = c.req.param('submissionId');
 
@@ -604,8 +672,8 @@ export function createFormBridgeAppWithIntakes(
     });
   });
 
-  // PATCH /intake/:intakeId/submissions/:submissionId — update fields
-  app.patch('/intake/:intakeId/submissions/:submissionId', async (c) => {
+  // PATCH /intake/:intakeId/submissions/:submissionId — update fields (submission:write)
+  app.patch('/intake/:intakeId/submissions/:submissionId', requirePermission('submission:write'), async (c) => {
     const intakeId = c.req.param('intakeId');
     const submissionId = c.req.param('submissionId');
 
