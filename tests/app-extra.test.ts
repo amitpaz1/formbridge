@@ -559,7 +559,15 @@ describe('Environment Configuration Edge Cases', () => {
 
   it('should handle missing webhook secret with warning', async () => {
     delete process.env.FORMBRIDGE_WEBHOOK_SECRET;
-    const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Logger now handles warnings instead of console.warn
+    const { setLogger, getLogger } = await import('../src/logging.js');
+    const pino = (await import('pino')).default;
+    const { Writable } = await import('stream');
+    const logs: string[] = [];
+    const dest = new Writable({ write(chunk, _enc, cb) { logs.push(chunk.toString()); cb(); } });
+    const testLogger = pino({ level: 'warn' }, dest);
+    setLogger(testLogger);
 
     const app = createFormBridgeAppWithIntakes([testIntake]);
     const res = await app.request('/intake/test_form/submissions', {
@@ -571,11 +579,10 @@ describe('Environment Configuration Edge Cases', () => {
     });
 
     expect(res.status).toBe(201);
-    expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('FORMBRIDGE_WEBHOOK_SECRET is not set')
-    );
-    
-    consoleSpy.mockRestore();
+    // Wait for pino to flush
+    await new Promise((r) => setTimeout(r, 50));
+    const allLogs = logs.join('');
+    expect(allLogs).toContain('FORMBRIDGE_WEBHOOK_SECRET is not set');
   });
 
   it('should handle missing reviewer webhook URL gracefully', async () => {

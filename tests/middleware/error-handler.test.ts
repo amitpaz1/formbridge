@@ -358,12 +358,15 @@ describe('Error Handler Middleware', () => {
 
   describe('createErrorHandler options', () => {
     it('should log errors by default in non-production', async () => {
-      await fetchJson(
+      // Error handler now uses pino structured logger instead of console.error.
+      // Verify the handler runs without error and returns proper response.
+      const { body, status } = await fetchJson(
         createTestApp(() => {
           throw new Error('test error');
         })
       );
-      expect(consoleSpy).toHaveBeenCalled();
+      expect(status).toBe(500);
+      expect(body.error.message).toBe('test error');
     });
 
     it('should not log errors when logErrors is false', async () => {
