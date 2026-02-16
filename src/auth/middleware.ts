@@ -15,7 +15,7 @@ import {
 } from "./api-key-auth.js";
 import { OAuthProvider } from "./oauth-provider.js";
 import { type Role, hasPermission, type Permission } from "./rbac.js";
-import { RateLimiter } from "./rate-limiter.js";
+import type { RateLimiterBackend } from "./rate-limiter.js";
 
 const VALID_ROLES = new Set<string>(["admin", "reviewer", "viewer"]);
 function isValidRole(value: unknown): value is Role {
@@ -34,7 +34,7 @@ export interface AuthConfig {
   /** OAuth provider config */
   oauthProvider?: OAuthProvider;
   /** Rate limiter */
-  rateLimiter?: RateLimiter;
+  rateLimiter?: RateLimiterBackend;
   /** Default role for API key auth when no role is specified */
   defaultRole?: Role;
 }
@@ -106,10 +106,10 @@ export function createAuthMiddleware(config: AuthConfig) {
       );
     }
 
-    // Rate limiting
+    // Rate limiting (supports both sync and async backends)
     if (config.rateLimiter && authContext.tenantId) {
       const rateLimitKey = authContext.tenantId;
-      const result = config.rateLimiter.check(rateLimitKey);
+      const result = await Promise.resolve(config.rateLimiter.check(rateLimitKey));
 
       c.header("X-RateLimit-Limit", String(result.limit));
       c.header("X-RateLimit-Remaining", String(result.remaining));

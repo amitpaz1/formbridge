@@ -16,6 +16,8 @@ import {
 } from 'react-router-dom';
 
 import { FormBridgeApiClient } from './api/client.js';
+import { AuthProvider, useAuth } from './auth/sso.js';
+import { LoginPage } from './auth/LoginPage.js';
 import type {
   AnalyticsSummary,
   VolumeDataPoint,
@@ -266,8 +268,26 @@ function AppShell() {
   );
 }
 
+function AuthGate() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return createElement('div', { className: 'fb-loading' }, 'Loading…');
+  }
+
+  if (!user) {
+    return createElement(LoginPage);
+  }
+
+  return createElement(AppShell);
+}
+
 function App() {
-  return createElement(BrowserRouter, null, createElement(AppShell));
+  return createElement(
+    AuthProvider,
+    { baseUrl: '' },
+    createElement(BrowserRouter, null, createElement(AuthGate))
+  );
 }
 
 // Mount the app

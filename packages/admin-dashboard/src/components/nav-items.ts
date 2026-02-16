@@ -4,11 +4,15 @@
  * Extracted to avoid React dependency for testing.
  */
 
+export type MinRole = 'admin' | 'reviewer' | 'viewer';
+
 export interface NavItem {
   id: string;
   label: string;
   path: string;
   icon?: string;
+  /** Minimum role required to see this nav item (default: 'viewer') */
+  minRole?: MinRole;
 }
 
 export const NAV_ITEMS: NavItem[] = [
