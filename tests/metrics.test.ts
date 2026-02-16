@@ -1,9 +1,9 @@
 /**
  * Tests for FB-E4: Prometheus Metrics Endpoint
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { createFormBridgeAppWithIntakes } from '../src/app.js';
-import { metricsRegistry } from '../src/metrics.js';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createFormBridgeAppWithIntakes, createFormBridgeApp } from '../src/app.js';
+import { metricsRegistry, startMetricsServer } from '../src/metrics.js';
 import type { IntakeDefinition } from '../src/submission-types.js';
 
 const testIntake: IntakeDefinition = {
@@ -73,6 +73,25 @@ describe('Prometheus Metrics Endpoint (FB-E4)', () => {
     const body = await metricsRes.text();
     // The counter should have been incremented
     expect(body).toMatch(/formbridge_submissions_total\{.*\} 1/);
+  });
+
+  it('skipMetricsRoute option removes /metrics from main app', async () => {
+    const app = createFormBridgeAppWithIntakes([testIntake], { skipMetricsRoute: true });
+    const res = await app.request('/metrics');
+    expect(res.status).toBe(404);
+  });
+
+  it('METRICS_PORT: startMetricsServer serves /metrics on a separate port', async () => {
+    const handle = await startMetricsServer(19123);
+    try {
+      const res = await fetch('http://localhost:19123/metrics');
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain('nodejs_');
+      expect(body).toContain('formbridge_submissions_total');
+    } finally {
+      await handle.close();
+    }
   });
 
   it('/metrics returns valid Prometheus format (each line is comment, metric, or empty)', async () => {

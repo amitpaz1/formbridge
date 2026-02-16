@@ -113,6 +113,7 @@ export type {
 
 export { createFormBridgeApp, createFormBridgeAppWithIntakes } from './app.js';
 export type { FormBridgeAppOptions } from './app.js';
+export { startMetricsServer } from './metrics.js';
 
 // =============================================================================
 // HTTP Route Utilities (Advanced Usage)

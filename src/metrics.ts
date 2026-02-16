@@ -170,3 +170,27 @@ export async function getMetricsText(): Promise<string> {
 export function getMetricsContentType(): string {
   return metricsRegistry.contentType;
 }
+
+/**
+ * Start a dedicated metrics HTTP server on the given port.
+ * Returns a handle to close the server.
+ */
+export async function startMetricsServer(port: number): Promise<{ close: () => Promise<void> }> {
+  const { Hono } = await import('hono');
+  const { serve } = await import('@hono/node-server');
+
+  const metricsApp = new Hono();
+  metricsApp.get('/metrics', async (c) => {
+    const text = await getMetricsText();
+    return c.text(text, 200, { 'Content-Type': getMetricsContentType() });
+  });
+
+  const server = serve({ fetch: metricsApp.fetch, port });
+
+  return {
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close((err?: Error) => (err ? reject(err) : resolve()));
+      }),
+  };
+}

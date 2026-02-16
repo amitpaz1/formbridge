@@ -259,6 +259,8 @@ export interface FormBridgeAppOptions {
   cors?: CorsOptions;
   auth?: AuthConfig;
   storage?: FormBridgeStorage;
+  /** When true, skip registering /metrics on the main app (served on separate METRICS_PORT) */
+  skipMetricsRoute?: boolean;
 }
 
 /**
@@ -288,11 +290,13 @@ export function createFormBridgeApp(options?: FormBridgeAppOptions): Hono {
     app.use('*', createCorsMiddleware(options.cors));
   }
 
-  // Prometheus metrics endpoint (bypasses auth)
-  app.get('/metrics', async (c) => {
-    const text = await getMetricsText();
-    return c.text(text, 200, { 'Content-Type': getMetricsContentType() });
-  });
+  // Prometheus metrics endpoint (bypasses auth) — skip if served on separate METRICS_PORT
+  if (!options?.skipMetricsRoute) {
+    app.get('/metrics', async (c) => {
+      const text = await getMetricsText();
+      return c.text(text, 200, { 'Content-Type': getMetricsContentType() });
+    });
+  }
 
   // Health check (liveness probe — unchanged)
   app.route('/health', createHealthRouter());
@@ -348,11 +352,13 @@ export function createFormBridgeAppWithIntakes(
     getIntakeCount: () => registry.listIntakeIds().length,
   }));
 
-  // Prometheus metrics endpoint (bypasses auth)
-  app.get('/metrics', async (c) => {
-    const text = await getMetricsText();
-    return c.text(text, 200, { 'Content-Type': getMetricsContentType() });
-  });
+  // Prometheus metrics endpoint (bypasses auth) — skip if served on separate METRICS_PORT
+  if (!options?.skipMetricsRoute) {
+    app.get('/metrics', async (c) => {
+      const text = await getMetricsText();
+      return c.text(text, 200, { 'Content-Type': getMetricsContentType() });
+    });
+  }
 
   // Intake schema routes
   app.route('/intake', createIntakeRouter(registry));
